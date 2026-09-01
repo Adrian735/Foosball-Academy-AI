@@ -1,0 +1,11 @@
+docs/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+.env
+
+# Local data
+data/

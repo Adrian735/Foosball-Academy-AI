@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy
+psycopg2-binary
+celery
+redis
+pydantic-settings
+opencv-python-headless
+numpy
+httpx2
+pytest
