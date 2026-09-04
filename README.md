@@ -1,4 +1,4 @@
-* [ ] 
+* [ ]
 
 # Foosball Academy AI
 
@@ -75,4 +75,67 @@ docker compose up --build
 
 ```bash
 pytest
+```
+
+## Tools
+
+#### Table-detection annotations
+
+These are development and regression-test tools. They are not used during
+normal user video processing.
+
+Run the interactive annotation tool from the repository root after activating
+the virtual environment:
+
+* [ ]
+  ```bash
+  python tools/annotate_table.py \
+  	tests/table-detection_tests/table-detection_test-1.mp4 \
+  	tests/fixtures/expected/table-detection_test-1.json
+  ```
+
+Left-click the four ordered field corners (`top_left`, `top_right`,
+`bottom_right`, `bottom_left`), then click two endpoints for each rod. Right
+click undoes the most recent input. Press `s` to save the JSON fixture and its
+annotated PNG preview, or `q` to quit without saving.
+
+To annotate a different startup frame, pass its zero-based frame index:
+
+```bash
+python tools/annotate_table.py \
+	tests/table-detection_tests/table-detection_test-1.mp4 \
+	tests/fixtures/expected/table-detection_test-1-frame-30.json \
+	--frame-index 30
+```
+
+The default project dependency is `opencv-python-headless`, which is suitable
+for the service but cannot open an interactive window. Run the interactive
+command on a desktop session with a display and install the GUI build first:
+
+* [ ] 
+  ```bash
+  pip install opencv-python
+  ```
+
+On a headless machine, export a frame for annotation in an external image
+viewer instead:
+
+```bash
+python tools/annotate_table.py \
+	tests/table-detection_tests/table-detection_test-1.mp4 \
+	tests/fixtures/expected/table-detection_test-1.json \
+	--export-frame /tmp/table-frame.png
+```
+
+The renderer is called automatically by the annotation tool. Run its focused
+tests directly with:
+
+```bash
+pytest -q tests/unit/test_debug_renderer.py
+```
+
+Run the startup-frame reader tests with:
+
+```bash
+pytest -q tests/unit/test_startup_frames.py
 ```
