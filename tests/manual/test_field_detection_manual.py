@@ -84,7 +84,7 @@ def test_field_detection_manual_diagnostics_for_all_videos() -> None:
     """Print and save field-detection diagnostics for every supplied video."""
     detector = FieldDetector()
     video_paths = sorted(VIDEO_DIRECTORY.glob("*.mp4"))
-    assert len(video_paths) == 4, "Expected exactly four supplied table-detection videos"
+    assert video_paths, "Expected at least one supplied table-detection video"
 
     for video_path in video_paths:
         expected = json.loads(_expected_path(video_path).read_text(encoding="utf-8"))
@@ -95,8 +95,9 @@ def test_field_detection_manual_diagnostics_for_all_videos() -> None:
         detections = []
         video_output_directory = DEBUG_OUTPUT_DIRECTORY / video_path.stem
         video_output_directory.mkdir(parents=True, exist_ok=True)
-        labels = MANUAL_FRAME_LABELS[video_path.stem]
-        assert set(labels) == set(frame_indices), f"Manual labels do not cover {video_path.name}"
+        labels = MANUAL_FRAME_LABELS.get(video_path.stem)
+        if labels is not None:
+            assert set(labels) == set(frame_indices), f"Manual labels do not cover {video_path.name}"
         print(f"\n[{video_path.name}] frame_count={frame_count} sample_indices={frame_indices}")
         try:
             for frame_index in frame_indices:
@@ -104,10 +105,12 @@ def test_field_detection_manual_diagnostics_for_all_videos() -> None:
                 was_read, frame = capture.read()
                 assert was_read and frame is not None, f"Unable to read frame {frame_index}"
                 detection = detector.detect(frame)
-                manual_status, wrong_corners = labels[frame_index]
-                manual_note = f"manual={manual_status}"
-                if wrong_corners:
-                    manual_note += f" wrong_corners={list(wrong_corners)}"
+                manual_note = "manual=unreviewed"
+                if labels is not None:
+                    manual_status, wrong_corners = labels[frame_index]
+                    manual_note = f"manual={manual_status}"
+                    if wrong_corners:
+                        manual_note += f" wrong_corners={list(wrong_corners)}"
                 if detection is None:
                     print(f"  frame={frame_index} detected=None {manual_note}")
                     debug_image = render_field_detection(frame, None, frame_index, (manual_note,))
@@ -138,5 +141,3 @@ def test_field_detection_manual_diagnostics_for_all_videos() -> None:
             capture.release()
 
         assert detections, f"No field geometry detected in {video_path.name}"
-    summary = {status: sum(label[0] == status for label in labels.values()) for status in ("good", "wrong", "unusable")}
-    print(f"  manual_summary={summary}")

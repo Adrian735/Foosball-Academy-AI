@@ -3,6 +3,8 @@
 import uuid
 from pathlib import Path
 
+import cv2
+
 from app.detection.config import DEFAULT_DETECTION_CONFIG, DetectionConfig
 from app.detection.contracts.table_contracts import TableCalibration
 from app.detection.debug_renderer import render_field_detection, write_debug_image
@@ -69,15 +71,29 @@ class TableCalibrator:
         or persistence consumers.
         """
         startup = self._frame_reader.read(video_path)
-        if not startup.accepted_frames:
-            raise ValueError("Cannot render field debug image without an accepted startup frame")
-        frame = startup.accepted_frames[0]
+        if startup.accepted_frames:
+            frame_index = startup.accepted_frames[0].frame_index
+            frame_image = startup.accepted_frames[0].image
+        else:
+            frame_index, frame_image = self._read_first_frame(video_path)
         image = render_field_detection(
-            frame.image,
+            frame_image,
             calibration.field,
-            frame.frame_index,
-            calibration.warnings,
+            frame_index,
+            ("No startup frame passed the quality gate", *calibration.warnings),
         )
         output_path = Path(output_directory) / f"field-{uuid.uuid4().hex}.png"
         write_debug_image(str(output_path), image)
         return str(output_path)
+
+    @staticmethod
+    def _read_first_frame(video_path: str) -> tuple[int, object]:
+        """Read frame zero for diagnostics when all startup frames are rejected."""
+        capture = cv2.VideoCapture(video_path)
+        try:
+            was_read, image = capture.read()
+            if not was_read or image is None:
+                raise ValueError("Cannot render field debug image: first frame is unreadable")
+            return 0, image
+        finally:
+            capture.release()

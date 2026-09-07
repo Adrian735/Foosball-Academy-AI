@@ -31,6 +31,14 @@ def test_detector_returns_ordered_field_geometry() -> None:
     assert top_right[1] < bottom_right[1]
 
 
+def test_detector_prioritizes_field_geometry_over_image_coverage() -> None:
+    """A smaller but rectangular field should retain useful confidence."""
+    result = FieldDetector().detect(_synthetic_field())
+
+    assert result is not None
+    assert result.confidence >= 0.6
+
+
 def test_detector_returns_none_when_no_field_colour_is_present() -> None:
     """A dark frame without a field contour is rejected safely."""
     assert FieldDetector().detect(np.zeros((400, 600, 3), dtype=np.uint8)) is None

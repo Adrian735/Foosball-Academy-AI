@@ -46,7 +46,11 @@ class FieldDetector:
         x, y, width, height = cv2.boundingRect(np.asarray(ordered, dtype=np.float32))
         rectangularity = min(1.0, polygon_area / max(1.0, float(width * height)))
         area_score = min(1.0, area_ratio / 0.5)
-        confidence = min(1.0, 0.55 * area_score + 0.45 * rectangularity)
+        confidence = min(
+            1.0,
+            self._config.field_area_confidence_weight * area_score
+            + self._config.field_rectangularity_confidence_weight * rectangularity,
+        )
         return FieldGeometry(ordered, (x, y, width, height), confidence, method)
 
     def _field_mask(self, hsv: np.ndarray) -> np.ndarray:

@@ -15,7 +15,7 @@ class DetectionConfig:
     """
 
     # Identifies the exact threshold set used to produce a calibration result.
-    detector_config_version: str = "1"
+    detector_config_version: str = "2"
     # Limits static calibration to the first seconds of a submitted video.
     calibration_window_seconds: float = 3.0
     # Caps decoded startup frames before sampling to bound processing cost.
@@ -48,10 +48,14 @@ class DetectionConfig:
     morphology_kernel_size: int = 15
     # Rejects field contours that occupy too little of the source frame.
     minimum_field_area_ratio: float = 0.02
+    # Weighs visible field coverage as a secondary confidence signal.
+    field_area_confidence_weight: float = 0.25
+    # Weighs quadrilateral rectangularity as the primary confidence signal.
+    field_rectangularity_confidence_weight: float = 0.75
     # Requires a field candidate to meet this confidence before consensus.
-    minimum_field_confidence: float = 0.6
+    minimum_field_confidence: float = 0.50
     # Rejects consensus when any corner moves farther than this across frames.
-    maximum_field_corner_spread_pixels: float = 35.0
+    maximum_field_corner_spread_pixels: float = 40.0
     # Sets the canonical table-plane width used by perspective transforms.
     canonical_field_width: int = 1000
     # Sets the canonical table-plane height used by perspective transforms.

@@ -64,3 +64,42 @@ def test_field_detection_accepts_raw_video_body(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["field"]["detection_method"] == "frame_consensus"
+
+
+def test_field_detection_debug_mode_exports_when_all_frames_fail_quality(
+    tmp_path,
+    monkeypatch,
+):
+    """Debug mode still exports a diagnostic image when no frame is accepted."""
+    api = FastAPI()
+    api.include_router(detection.router)
+    monkeypatch.setattr(detection, "storage", VideoStorage(str(tmp_path / "videos")))
+    monkeypatch.setattr(detection.settings, "image_debug", True)
+    monkeypatch.setattr(detection.settings, "debug_output_dir", str(tmp_path / "debug"))
+
+    video_path = Path("tests/table-detection_tests/table-detection_test-1.mp4")
+    original_calibrator = detection.TableCalibrator
+
+    class RejectAllFrames:
+        def __init__(self, reader):
+            self._reader = reader
+
+        def read(self, video_path):
+            result = self._reader.read(video_path)
+            return type(result)(result.metadata, result.frame_quality, tuple())
+
+    class RejectingCalibrator(original_calibrator):
+        def __init__(self):
+            super().__init__()
+            self._frame_reader = RejectAllFrames(self._frame_reader)
+
+    monkeypatch.setattr(detection, "TableCalibrator", RejectingCalibrator)
+    with video_path.open("rb") as video:
+        response = TestClient(api).post(
+            "/detection/field",
+            files={"video": (video_path.name, video, "video/mp4")},
+        )
+
+    assert response.status_code == 200
+    exports = list((tmp_path / "debug").glob("field-*.png"))
+    assert len(exports) == 1
