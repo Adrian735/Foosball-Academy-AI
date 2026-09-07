@@ -59,11 +59,52 @@ docker compose up -d postgres redis
 uvicorn app.main:app --reload
 ```
 
+In debug
+
+```Shell
+IMAGE_DEBUG=true uvicorn app.main:app --reload
+```
+
 ### 5) Run the worker (separate terminal)
 
 ```bash
 celery -A app.worker.celery_app worker --loglevel=info
 ```
+
+### Run field detection only
+
+Once the API is running, upload a supported Bonzini video without creating a
+submission:
+
+```bash
+curl -X POST http://localhost:8000/detection/field \
+	-F "video=@tests/table-detection_tests/table-detection_test-1.mp4"
+```
+
+The endpoint also accepts a raw `video/mp4` request body, which is the format
+Postman uses with Body -> binary:
+
+```bash
+curl --location 'http://127.0.0.1:8000/detection/field' \
+	--header 'Content-Type: video/mp4' \
+	--data-binary '@tests/table-detection_tests/table-detection_test-1.mp4'
+```
+
+The JSON response contains video metadata, sampled-frame quality diagnostics,
+the consensus field geometry (or `null` when calibration is uncertain), a
+confidence score, and warnings. Supported inputs are at least 5 seconds and
+720p, filmed from the initial diagonal top-down Bonzini setup.
+
+To export an annotated PNG for every field-detection request, launch the API
+with debug mode enabled:
+
+```bash
+IMAGE_DEBUG=true uvicorn app.main:app --reload
+```
+
+Images are written to `tests/artifacts/field_detection_api/` by default, and
+the response includes the generated `debug_image_path`. Override the directory
+with `DEBUG_OUTPUT_DIR`.
 
 ## Run everything with Docker Compose
 
@@ -112,7 +153,7 @@ The default project dependency is `opencv-python-headless`, which is suitable
 for the service but cannot open an interactive window. Run the interactive
 command on a desktop session with a display and install the GUI build first:
 
-* [ ] 
+* [ ]
   ```bash
   pip install opencv-python
   ```

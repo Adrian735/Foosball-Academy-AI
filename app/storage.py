@@ -22,5 +22,12 @@ class VideoStorage:
             out.write(file.file.read())
         return str(destination)
 
+    def save_bytes(self, content: bytes, extension: str = ".mp4") -> str:
+        """Save raw video content and return its local path."""
+        filename = f"{uuid.uuid4()}{extension}"
+        destination = self.base_dir / filename
+        destination.write_bytes(content)
+        return str(destination)
+
 
 storage = VideoStorage()
