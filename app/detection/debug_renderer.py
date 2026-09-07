@@ -7,7 +7,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from app.detection.contracts.table_contracts import TableCalibration
+from app.detection.contracts.table_contracts import FieldGeometry, TableCalibration
 
 _FIELD_COLOUR = (0, 255, 255)
 _ROD_COLOUR = (255, 0, 255)
@@ -42,6 +42,26 @@ def render_expected_annotation(image: np.ndarray, expected: Mapping[str, Any]) -
         _draw_rods(overlay, [{"index": index, "line": line} for index, line in enumerate(rod_lines)])
     else:
         _draw_rod_positions(overlay, expected.get("rod_y_positions", []), corners)
+    return overlay
+
+
+def render_field_detection(
+    image: np.ndarray,
+    field: FieldGeometry | None,
+    frame_index: int,
+    diagnostics: Sequence[str] = (),
+) -> np.ndarray:
+    """Return an image annotated with one automated field-detection result."""
+    overlay = image.copy()
+    if field is not None:
+        _draw_field(overlay, field.to_dict()["corners"])
+        status = (
+            f"frame: {frame_index} | method: {field.detection_method} | "
+            f"confidence: {field.confidence:.3f}"
+        )
+        _draw_status(overlay, field.confidence, (status, *diagnostics))
+    else:
+        _draw_status(overlay, 0.0, (f"frame: {frame_index} | field: not detected", *diagnostics))
     return overlay
 
 

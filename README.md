@@ -139,3 +139,26 @@ Run the startup-frame reader tests with:
 ```bash
 pytest -q tests/unit/test_startup_frames.py
 ```
+
+To manually inspect field detection across all four supplied videos with
+debug output:
+
+```bash
+pytest -s tests/manual/test_field_detection_manual.py
+```
+
+This prints sampled frame indices, detection method, confidence, corners, and
+corner errors against the manual annotations. It also writes one annotated PNG
+per sampled frame under `tests/artifacts/field_detection/`. Set
+`FIELD_DEBUG_OUTPUT_DIR` to choose another output directory:
+
+```bash
+FIELD_DEBUG_OUTPUT_DIR=/tmp/foosball-field-debug \
+	pytest -s tests/manual/test_field_detection_manual.py
+```
+
+Each image shows the automated field polygon, numbered corners, detection
+method, confidence, frame index, corner errors, and the recorded manual label
+(`good`, `wrong`, or `unusable`). Review the printed values and images manually
+for portrait or unusual camera clips, which are outside the initial supported
+landscape configuration.

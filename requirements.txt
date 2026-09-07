@@ -10,3 +10,4 @@ opencv-python-headless
 numpy
 httpx2
 pytest
+opencv-python

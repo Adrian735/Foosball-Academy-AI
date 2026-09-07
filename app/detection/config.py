@@ -50,6 +50,12 @@ class DetectionConfig:
     minimum_field_area_ratio: float = 0.02
     # Requires a field candidate to meet this confidence before consensus.
     minimum_field_confidence: float = 0.6
+    # Rejects consensus when any corner moves farther than this across frames.
+    maximum_field_corner_spread_pixels: float = 35.0
+    # Sets the canonical table-plane width used by perspective transforms.
+    canonical_field_width: int = 1000
+    # Sets the canonical table-plane height used by perspective transforms.
+    canonical_field_height: int = 600
     # Sets the lower hysteresis threshold for Canny edge detection.
     canny_low_threshold: int = 30
     # Sets the upper hysteresis threshold for Canny edge detection.

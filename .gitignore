@@ -9,5 +9,6 @@ venv/
 
 # Local data
 data/
+tests/artifacts/
 
 *.mp4
