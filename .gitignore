@@ -12,3 +12,4 @@ data/
 tests/artifacts/
 
 *.mp4
+*.code-workspace

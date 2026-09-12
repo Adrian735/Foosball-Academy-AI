@@ -35,9 +35,11 @@ class FieldDetector:
         if area_ratio < self._config.minimum_field_area_ratio:
             return None
 
-        corners, method = self._find_corners(mask, contour, frame.shape[1], frame.shape[0])
-        if corners is None:
+        selection = self._select_corners(mask, contour, frame.shape[1], frame.shape[0])
+        if selection is None:
             return None
+
+        corners, method, contour_iou = selection
 
         ordered = order_corners(corners)
         polygon_area = abs(float(cv2.contourArea(np.asarray(ordered, dtype=np.float32))))
@@ -49,7 +51,8 @@ class FieldDetector:
         confidence = min(
             1.0,
             self._config.field_area_confidence_weight * area_score
-            + self._config.field_rectangularity_confidence_weight * rectangularity,
+            + self._config.field_rectangularity_confidence_weight * rectangularity
+            + self._config.field_contour_agreement_confidence_weight * contour_iou,
         )
         return FieldGeometry(ordered, (x, y, width, height), confidence, method)
 
@@ -65,34 +68,55 @@ class FieldDetector:
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
         return cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
 
-    def _find_corners(
+    def _select_corners(
         self,
         mask: np.ndarray,
         contour: np.ndarray,
         frame_width: int,
         frame_height: int,
-    ) -> tuple[Optional[tuple[tuple[float, float], ...]], str]:
-        """Try Hough intersections, contour approximation, min-area, then bounds."""
+    ) -> Optional[tuple[tuple[tuple[float, float], ...], str, float]]:
+        """Select the candidate quadrilateral that best agrees with the field contour."""
         hough_corners = self._hough_corners(mask, contour, frame_width, frame_height)
-        if hough_corners is not None:
-            return hough_corners, "hough_intersections"
-
         perimeter = cv2.arcLength(contour, True)
         approximation = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+        candidates: list[tuple[tuple[tuple[float, float], ...], str]] = []
+        if hough_corners is not None:
+            candidates.append((hough_corners, "hough_intersections"))
         if len(approximation) >= 4:
             points = approximation.reshape(-1, 2)
-            return self._extreme_points(points), "contour_approximation"
+            candidates.append((self._extreme_points(points), "contour_approximation"))
 
         rectangle = cv2.boxPoints(cv2.minAreaRect(contour))
         if len(rectangle) == 4:
-            return tuple((float(point[0]), float(point[1])) for point in rectangle), "min_area_rectangle"
+            candidates.append((tuple((float(point[0]), float(point[1])) for point in rectangle), "min_area_rectangle"))
 
         x, y, width, height = cv2.boundingRect(contour)
-        return (
+        candidates.append((
             ((float(x), float(y)), (float(x + width), float(y)),
              (float(x + width), float(y + height)), (float(x), float(y + height))),
             "bounding_rectangle",
-        )
+        ))
+
+        scored = [
+            (corners, method, self._contour_iou(mask, corners))
+            for corners, method in candidates
+        ]
+        valid = [
+            candidate
+            for candidate in scored
+            if candidate[1] != "hough_intersections"
+            or candidate[2] >= self._config.minimum_hough_contour_iou
+        ]
+        return max(valid, key=lambda candidate: candidate[2], default=None)
+
+    @staticmethod
+    def _contour_iou(mask: np.ndarray, corners: tuple[tuple[float, float], ...]) -> float:
+        """Return the IoU between a candidate quadrilateral and the cleaned field mask."""
+        candidate_mask = np.zeros_like(mask)
+        cv2.fillConvexPoly(candidate_mask, np.asarray(corners, dtype=np.int32), 255)
+        intersection = np.count_nonzero(cv2.bitwise_and(mask, candidate_mask))
+        union = np.count_nonzero(cv2.bitwise_or(mask, candidate_mask))
+        return float(intersection / union) if union else 0.0
 
     def _hough_corners(
         self,
