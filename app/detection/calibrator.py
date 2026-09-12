@@ -7,9 +7,10 @@ import cv2
 
 from app.detection.config import DEFAULT_DETECTION_CONFIG, DetectionConfig
 from app.detection.contracts.table_contracts import TableCalibration
-from app.detection.debug_renderer import render_field_detection, render_rod_candidates, write_debug_image
+from app.detection.debug_renderer import render_field_detection, render_rod_candidates, render_stable_rods, write_debug_image
 from app.detection.field_consensus import FieldConsensus, FieldConsensusError
 from app.detection.field_detector import FieldDetector
+from app.detection.rod_consensus import RodConsensus, RodConsensusError
 from app.detection.rod_detector import RodDetector
 from app.detection.startup_frames import StartupFrameReader
 
@@ -85,11 +86,25 @@ class TableCalibrator:
         )
         if calibration.field is not None:
             rod_detector = RodDetector(self._config)
-            accepted_candidates = rod_detector.detect(frame_image, calibration.field)
-            rejected_candidates = rod_detector.rejected_candidates
+            candidates_by_frame = []
+            first_frame_candidates = []
+            first_frame_rejected = ()
+            for sampled_frame in startup.accepted_frames:
+                candidates = rod_detector.detect(sampled_frame.image, calibration.field)
+                candidates_by_frame.append(candidates)
+                if sampled_frame.frame_index == frame_index:
+                    first_frame_candidates = candidates
+                    first_frame_rejected = rod_detector.rejected_candidates
+            accepted_candidates = first_frame_candidates
+            rejected_candidates = first_frame_rejected
+            stable_rods = ()
+            try:
+                stable_rods = tuple(RodConsensus(self._config).combine(candidates_by_frame, calibration.field))
+            except RodConsensusError as error:
+                print(f"[rod-debug] consensus=failed reason={error}")
             print(
                 f"[rod-debug] frame={frame_index} accepted={len(accepted_candidates)} "
-                f"rejected={len(rejected_candidates)}"
+                f"rejected={len(rejected_candidates)} stable={len(stable_rods)}"
             )
             for candidate_index, candidate in enumerate(accepted_candidates):
                 print(
@@ -98,7 +113,11 @@ class TableCalibrator:
                     f"confidence={candidate.confidence:.3f} "
                     f"line={candidate.line} diagnostics={candidate.diagnostics}"
                 )
-            image = render_rod_candidates(image, accepted_candidates, rejected_candidates)
+            if stable_rods:
+                image = render_rod_candidates(image, (), rejected_candidates)
+                image = render_stable_rods(image, stable_rods)
+            else:
+                image = render_rod_candidates(image, accepted_candidates, rejected_candidates)
         output_path = Path(output_directory) / f"field-{uuid.uuid4().hex}.png"
         write_debug_image(str(output_path), image)
         return str(output_path)

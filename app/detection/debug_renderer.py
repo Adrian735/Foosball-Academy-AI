@@ -7,7 +7,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from app.detection.contracts.rod_contracts import RodCandidate
+from app.detection.contracts.rod_contracts import Rod, RodCandidate
 from app.detection.contracts.table_contracts import FieldGeometry, TableCalibration
 
 _FIELD_COLOUR = (0, 255, 255)
@@ -78,6 +78,13 @@ def render_rod_candidates(
         _draw_candidate_line(overlay, candidate, _REJECTED_ROD_COLOUR, 1)
     for candidate in accepted_candidates:
         _draw_candidate_line(overlay, candidate, _ROD_COLOUR, 2)
+    return overlay
+
+
+def render_stable_rods(image: np.ndarray, rods: Sequence[Rod]) -> np.ndarray:
+    """Return a copy annotated with rods recovered across sampled frames."""
+    overlay = image.copy()
+    _draw_rods(overlay, [rod.to_dict() for rod in rods])
     return overlay
 
 

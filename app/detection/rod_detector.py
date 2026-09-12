@@ -36,6 +36,7 @@ class RodDetector:
         search_mask = cv2.dilate(search_mask, np.ones((2 * margin + 1, 2 * margin + 1), dtype=np.uint8))
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         edges = cv2.Canny(gray, self._config.canny_low_threshold, self._config.canny_high_threshold)
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         edges = cv2.bitwise_and(edges, search_mask)
         lines = cv2.HoughLinesP(
             edges,
@@ -52,7 +53,13 @@ class RodDetector:
         accepted: list[RodCandidate] = []
         rejected: list[RodCandidate] = []
         for raw_line in lines.reshape(-1, 4):
-            candidate = self._score_line(frame, field_geometry, tuple(int(value) for value in raw_line))
+            candidate = self._score_line(
+                frame,
+                field_geometry,
+                tuple(int(value) for value in raw_line),
+                hsv_image=hsv,
+                gray_image=gray,
+            )
             if candidate is None:
                 continue
             if self._is_accepted(candidate):
@@ -68,6 +75,8 @@ class RodDetector:
         frame: np.ndarray,
         field_geometry: FieldGeometry,
         raw_line: tuple[int, int, int, int],
+        hsv_image: np.ndarray | None = None,
+        gray_image: np.ndarray | None = None,
     ) -> RodCandidate | None:
         """Convert one Hough segment into a JSON-safe scored candidate."""
         start = (float(raw_line[0]), float(raw_line[1]))
@@ -86,8 +95,8 @@ class RodDetector:
         angle_score = max(0.0, 1.0 - angle / self._config.maximum_rod_angle_degrees)
         length_ratio = min(1.0, canonical_length / self._config.canonical_field_width)
         overlap_score = self._field_overlap_score(field_geometry.corners, start, end)
-        colour_evidence = self._player_colour_evidence(frame, start, end)
-        brightness_score = self._line_brightness_score(frame, start, end)
+        colour_evidence = self._player_colour_evidence(frame, start, end, hsv_image)
+        brightness_score = self._line_brightness_score(frame, start, end, gray_image)
         confidence = (
             0.30 * angle_score
             + 0.30 * length_ratio
@@ -120,14 +129,17 @@ class RodDetector:
 
     def _is_accepted(self, candidate: RodCandidate) -> bool:
         """Require both a useful score and enough span to represent a physical rod."""
+        outside_field = candidate.field_relative_y < 0.0 or candidate.field_relative_y > 1.0
         return (
-            candidate.confidence >= self._minimum_candidate_confidence()
-            and (
-                candidate.length_ratio >= self._config.minimum_rod_length_ratio
-                or (
-                    (candidate.field_relative_y < 0.0 or candidate.field_relative_y > 1.0)
-                    and candidate.length_ratio >= self._config.minimum_goal_rod_length_ratio
-                )
+            candidate.confidence >= (
+                self._config.minimum_goal_rod_confidence
+                if outside_field
+                else self._minimum_candidate_confidence()
+            )
+            and candidate.length_ratio >= (
+                self._config.minimum_goal_rod_length_ratio
+                if outside_field
+                else self._config.minimum_rod_length_ratio
             )
         )
 
@@ -145,9 +157,15 @@ class RodDetector:
             inside += int(cv2.pointPolygonTest(polygon, point, False) >= 0)
         return float(inside / len(samples))
 
-    def _player_colour_evidence(self, frame: np.ndarray, start: Point, end: Point) -> float:
+    def _player_colour_evidence(
+        self,
+        frame: np.ndarray,
+        start: Point,
+        end: Point,
+        hsv_image: np.ndarray | None = None,
+    ) -> float:
         """Measure red/blue pixels in a narrow band around a candidate line."""
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv = hsv_image if hsv_image is not None else cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         red_lower, red_upper = self._config.red_hsv_range
         red_wrap_lower, red_wrap_upper = self._config.red_wrap_hsv_range
         blue_lower, blue_upper = self._config.blue_hsv_range
@@ -162,9 +180,14 @@ class RodDetector:
         return float(np.count_nonzero(cv2.bitwise_and(colour_mask, band)) / band_size) if band_size else 0.0
 
     @staticmethod
-    def _line_brightness_score(frame: np.ndarray, start: Point, end: Point) -> float:
+    def _line_brightness_score(
+        frame: np.ndarray,
+        start: Point,
+        end: Point,
+        gray_image: np.ndarray | None = None,
+    ) -> float:
         """Score visible line quality from grayscale contrast in a narrow band."""
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = gray_image if gray_image is not None else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         band = np.zeros(gray.shape, dtype=np.uint8)
         cv2.line(band, (int(start[0]), int(start[1])), (int(end[0]), int(end[1])), 255, 5)
         values = gray[band > 0]

@@ -81,11 +81,13 @@ class DetectionConfig:
     # Requires a rod candidate to span this fraction of canonical field width.
     minimum_rod_length_ratio: float = 0.50
     # Allows partially visible rods in the goal area when they lie outside the field.
-    minimum_goal_rod_length_ratio: float = 0.25
+    minimum_goal_rod_length_ratio: float = 0.20
+    # Accounts for zero field-overlap evidence on rods wholly outside the field.
+    minimum_goal_rod_confidence: float = 0.40
     # Keeps physically distinct rods separated in normalized field coordinates.
     minimum_rod_cluster_separation: float = 0.06
     # Requires a rod cluster to appear in this fraction of accepted frames.
-    minimum_rod_coverage_ratio: float = 0.5
+    minimum_rod_coverage_ratio: float = 0.25
     # Enforces the eight-rod geometry of the supported Bonzini layout.
     expected_rod_count: int = 8
 
