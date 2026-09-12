@@ -7,9 +7,10 @@ import cv2
 
 from app.detection.config import DEFAULT_DETECTION_CONFIG, DetectionConfig
 from app.detection.contracts.table_contracts import TableCalibration
-from app.detection.debug_renderer import render_field_detection, write_debug_image
+from app.detection.debug_renderer import render_field_detection, render_rod_candidates, write_debug_image
 from app.detection.field_consensus import FieldConsensus, FieldConsensusError
 from app.detection.field_detector import FieldDetector
+from app.detection.rod_detector import RodDetector
 from app.detection.startup_frames import StartupFrameReader
 
 
@@ -82,6 +83,22 @@ class TableCalibrator:
             frame_index,
             ("No startup frame passed the quality gate", *calibration.warnings),
         )
+        if calibration.field is not None:
+            rod_detector = RodDetector(self._config)
+            accepted_candidates = rod_detector.detect(frame_image, calibration.field)
+            rejected_candidates = rod_detector.rejected_candidates
+            print(
+                f"[rod-debug] frame={frame_index} accepted={len(accepted_candidates)} "
+                f"rejected={len(rejected_candidates)}"
+            )
+            for candidate_index, candidate in enumerate(accepted_candidates):
+                print(
+                    f"[rod-debug] accepted[{candidate_index}] "
+                    f"relative_y={candidate.field_relative_y:.3f} "
+                    f"confidence={candidate.confidence:.3f} "
+                    f"line={candidate.line} diagnostics={candidate.diagnostics}"
+                )
+            image = render_rod_candidates(image, accepted_candidates, rejected_candidates)
         output_path = Path(output_directory) / f"field-{uuid.uuid4().hex}.png"
         write_debug_image(str(output_path), image)
         return str(output_path)

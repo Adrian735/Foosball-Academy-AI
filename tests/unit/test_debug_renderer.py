@@ -3,10 +3,15 @@
 import cv2
 import numpy as np
 
-from app.detection.contracts.rod_contracts import Rod
+from app.detection.contracts.rod_contracts import Rod, RodCandidate
 from app.detection.contracts.table_contracts import FieldGeometry, TableCalibration
 from app.detection.contracts.video_contracts import VideoMetadata
-from app.detection.debug_renderer import render_expected_annotation, render_table_calibration, write_debug_image
+from app.detection.debug_renderer import (
+    render_expected_annotation,
+    render_rod_candidates,
+    render_table_calibration,
+    write_debug_image,
+)
 
 
 def test_expected_annotation_renders_field_and_rod_lines() -> None:
@@ -43,3 +48,17 @@ def test_calibration_overlay_includes_field_rods_and_status(tmp_path) -> None:
     assert output_path.exists()
     assert cv2.imread(str(output_path)) is not None
     assert rendered[50, 60].tolist() == [255, 0, 255]
+
+
+def test_rod_candidate_overlay_distinguishes_accepted_and_rejected_lines() -> None:
+    """Candidate diagnostics render accepted magenta and rejected red lines."""
+    image = np.zeros((100, 120, 3), dtype=np.uint8)
+    accepted = RodCandidate(((10.0, 30.0), (110.0, 30.0)), 0.5, 0.9, 0.2, 0.8)
+    rejected = RodCandidate(((10.0, 70.0), (110.0, 70.0)), 0.8, 0.2, 0.0, 0.2)
+
+    rendered = render_rod_candidates(image, (accepted,), (rejected,))
+
+    assert rendered[30, 60].tolist() == [255, 0, 255]
+    assert rendered[70, 60][0] == 0
+    assert rendered[70, 60][1] == 0
+    assert rendered[70, 60][2] > 200

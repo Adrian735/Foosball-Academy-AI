@@ -7,10 +7,12 @@ from typing import Any
 import cv2
 import numpy as np
 
+from app.detection.contracts.rod_contracts import RodCandidate
 from app.detection.contracts.table_contracts import FieldGeometry, TableCalibration
 
 _FIELD_COLOUR = (0, 255, 255)
 _ROD_COLOUR = (255, 0, 255)
+_REJECTED_ROD_COLOUR = (0, 0, 255)
 _TEXT_COLOUR = (255, 255, 255)
 _WARNING_COLOUR = (0, 0, 255)
 _STATUS_X_POSITION = 12
@@ -65,6 +67,20 @@ def render_field_detection(
     return overlay
 
 
+def render_rod_candidates(
+    image: np.ndarray,
+    accepted_candidates: Sequence[RodCandidate],
+    rejected_candidates: Sequence[RodCandidate] = (),
+) -> np.ndarray:
+    """Return a copy annotated with accepted and rejected per-frame rod lines."""
+    overlay = image.copy()
+    for candidate in rejected_candidates:
+        _draw_candidate_line(overlay, candidate, _REJECTED_ROD_COLOUR, 1)
+    for candidate in accepted_candidates:
+        _draw_candidate_line(overlay, candidate, _ROD_COLOUR, 2)
+    return overlay
+
+
 def write_debug_image(output_path: str, image: np.ndarray) -> None:
     """Write a BGR debug image, raising ``ValueError`` if encoding fails."""
     destination = Path(output_path)
@@ -101,6 +117,24 @@ def _draw_rods(image: np.ndarray, rods: Sequence[Mapping[str, Any]]) -> None:
             2,
             cv2.LINE_AA,
         )
+
+
+def _draw_candidate_line(
+    image: np.ndarray,
+    candidate: RodCandidate,
+    colour: tuple[int, int, int],
+    thickness: int,
+) -> None:
+    """Draw one detector candidate without exposing its internal line type."""
+    start, end = candidate.line
+    cv2.line(
+        image,
+        (int(start[0]), int(start[1])),
+        (int(end[0]), int(end[1])),
+        colour,
+        thickness,
+        cv2.LINE_AA,
+    )
 
 
 def _draw_rod_positions(image: np.ndarray, positions: Sequence[float], corners: Sequence[Sequence[float]]) -> None:

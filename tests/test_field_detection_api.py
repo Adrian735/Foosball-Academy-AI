@@ -28,7 +28,7 @@ def test_field_detection_upload_returns_field_only_result(tmp_path, monkeypatch)
     assert result["confidence"] > 0.6
 
 
-def test_field_detection_debug_mode_exports_rendered_field(tmp_path, monkeypatch):
+def test_field_detection_debug_mode_exports_rendered_field_and_prints_rods(tmp_path, monkeypatch, capsys):
     """Debug mode writes one field overlay for an endpoint request."""
     api = FastAPI()
     api.include_router(detection.router)
@@ -47,6 +47,10 @@ def test_field_detection_debug_mode_exports_rendered_field(tmp_path, monkeypatch
     exports = list((tmp_path / "debug").glob("field-*.png"))
     assert len(exports) == 1
     assert response.json()["debug_image_path"] == str(exports[0])
+    debug_output = capsys.readouterr().out
+    assert "[rod-debug] frame=" in debug_output
+    assert "accepted=" in debug_output
+    assert "rejected=" in debug_output
 
 
 def test_field_detection_accepts_raw_video_body(tmp_path, monkeypatch):

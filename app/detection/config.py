@@ -74,12 +74,16 @@ class DetectionConfig:
     hough_min_line_length: int = 50
     # Allows this maximum pixel gap when merging Hough line segments.
     hough_max_line_gap: int = 50
+    # Searches beyond the field so rods in the goal area remain detectable.
+    rod_search_margin_pixels: int = 60
     # Limits accepted rod candidates to near-horizontal line angles.
     maximum_rod_angle_degrees: float = 15.0
-    # Requires a rod candidate to span this fraction of field width.
-    minimum_rod_length_ratio: float = 0.25
+    # Requires a rod candidate to span this fraction of canonical field width.
+    minimum_rod_length_ratio: float = 0.50
+    # Allows partially visible rods in the goal area when they lie outside the field.
+    minimum_goal_rod_length_ratio: float = 0.25
     # Keeps physically distinct rods separated in normalized field coordinates.
-    minimum_rod_cluster_separation: float = 0.04
+    minimum_rod_cluster_separation: float = 0.06
     # Requires a rod cluster to appear in this fraction of accepted frames.
     minimum_rod_coverage_ratio: float = 0.5
     # Enforces the eight-rod geometry of the supported Bonzini layout.

@@ -16,6 +16,9 @@ def test_detection_config_has_bonzini_defaults() -> None:
     assert config.minimum_video_height == 720
     assert config.minimum_video_duration_seconds == 5.0
     assert config.maximum_field_corner_spread_pixels == 40.0
+    assert config.rod_search_margin_pixels == 60
+    assert config.minimum_rod_length_ratio == 0.50
+    assert config.minimum_goal_rod_length_ratio == 0.25
 
 
 def test_detection_config_can_be_overridden_without_global_mutation() -> None:
