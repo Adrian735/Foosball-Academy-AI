@@ -86,8 +86,18 @@ class DetectionConfig:
     minimum_goal_rod_confidence: float = 0.40
     # Keeps physically distinct rods separated in normalized field coordinates.
     minimum_rod_cluster_separation: float = 0.06
+    # Rejects eight-row layouts whose normalized gaps are not Bonzini-like.
+    maximum_rod_spacing_deviation: float = 0.05
+    # Requires the top goalkeeper row to remain just outside the playing field.
+    maximum_top_goal_rod_relative_y: float = -0.02
+    # Rejects top candidates far above the supported goalkeeper goal area.
+    minimum_top_goal_rod_relative_y: float = -0.18
     # Requires a rod cluster to appear in this fraction of accepted frames.
     minimum_rod_coverage_ratio: float = 0.25
+    # Rejects dark shadow bands unless nearby player colours support a rod.
+    minimum_shadow_band_score: float = 0.18
+    # Treats colour evidence below this value as insufficient to override shadows.
+    minimum_shadow_colour_evidence: float = 0.05
     # Enforces the eight-rod geometry of the supported Bonzini layout.
     expected_rod_count: int = 8
 

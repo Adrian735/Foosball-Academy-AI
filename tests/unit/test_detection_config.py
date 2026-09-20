@@ -20,6 +20,9 @@ def test_detection_config_has_bonzini_defaults() -> None:
     assert config.minimum_rod_length_ratio == 0.50
     assert config.minimum_goal_rod_length_ratio == 0.20
     assert config.minimum_goal_rod_confidence == 0.40
+    assert config.maximum_rod_spacing_deviation == 0.05
+    assert config.maximum_top_goal_rod_relative_y == -0.02
+    assert config.minimum_top_goal_rod_relative_y == -0.18
 
 
 def test_detection_config_can_be_overridden_without_global_mutation() -> None:

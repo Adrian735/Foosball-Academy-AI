@@ -102,6 +102,7 @@ class TableCalibrator:
                 stable_rods = tuple(RodConsensus(self._config).combine(candidates_by_frame, calibration.field))
             except RodConsensusError as error:
                 print(f"[rod-debug] consensus=failed reason={error}")
+                stable_rods = tuple(RodConsensus(self._config).observed_rods(candidates_by_frame, calibration.field))
             print(
                 f"[rod-debug] frame={frame_index} accepted={len(accepted_candidates)} "
                 f"rejected={len(rejected_candidates)} stable={len(stable_rods)}"
@@ -114,10 +115,9 @@ class TableCalibrator:
                     f"line={candidate.line} diagnostics={candidate.diagnostics}"
                 )
             if stable_rods:
-                image = render_rod_candidates(image, (), rejected_candidates)
                 image = render_stable_rods(image, stable_rods)
             else:
-                image = render_rod_candidates(image, accepted_candidates, rejected_candidates)
+                image = render_rod_candidates(image, accepted_candidates)
         output_path = Path(output_directory) / f"field-{uuid.uuid4().hex}.png"
         write_debug_image(str(output_path), image)
         return str(output_path)

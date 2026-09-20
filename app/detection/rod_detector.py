@@ -1,6 +1,7 @@
 """Detect per-frame horizontal rod candidates inside a calibrated field."""
 
 from math import hypot
+from typing import Sequence
 
 import cv2
 import numpy as np
@@ -62,19 +63,23 @@ class RodDetector:
             )
             if candidate is None:
                 continue
+            if not self._is_near_horizontal(candidate):
+                continue
             if self._is_accepted(candidate):
                 accepted.append(candidate)
             else:
                 rejected.append(candidate)
 
-        self._last_rejected_candidates = tuple(rejected)
-        return self._merge_fragments(accepted)
+        merged_rejected = self._merge_fragments(frame, field_geometry, rejected, hsv, gray)
+        promoted = [candidate for candidate in merged_rejected if self._is_accepted(candidate)]
+        self._last_rejected_candidates = tuple(candidate for candidate in merged_rejected if not self._is_accepted(candidate))
+        return self._deduplicate_candidates([*accepted, *promoted])
 
     def _score_line(
         self,
         frame: np.ndarray,
         field_geometry: FieldGeometry,
-        raw_line: tuple[int, int, int, int],
+        raw_line: tuple[float, float, float, float],
         hsv_image: np.ndarray | None = None,
         gray_image: np.ndarray | None = None,
     ) -> RodCandidate | None:
@@ -97,6 +102,7 @@ class RodDetector:
         overlap_score = self._field_overlap_score(field_geometry.corners, start, end)
         colour_evidence = self._player_colour_evidence(frame, start, end, hsv_image)
         brightness_score = self._line_brightness_score(frame, start, end, gray_image)
+        shadow_score = self._line_shadow_score(frame, start, end, gray_image)
         confidence = (
             0.30 * angle_score
             + 0.30 * length_ratio
@@ -113,6 +119,7 @@ class RodDetector:
             f"field_overlap={overlap_score:.3f}",
             f"player_colour={colour_evidence:.3f}",
             f"line_quality={brightness_score:.3f}",
+            f"shadow_band={shadow_score:.3f}",
         )
         return RodCandidate(
             line=(start, end),
@@ -127,9 +134,22 @@ class RodDetector:
         """Return the minimum score required for a useful rod line."""
         return 0.45
 
+    @staticmethod
+    def _is_near_horizontal(candidate: RodCandidate) -> bool:
+        """Exclude non-rod Hough lines before same-row fragment clustering."""
+        angle_diagnostic = next(item for item in candidate.diagnostics if item.startswith("angle_score="))
+        return float(angle_diagnostic.removeprefix("angle_score=")) > 0.0
+
     def _is_accepted(self, candidate: RodCandidate) -> bool:
         """Require both a useful score and enough span to represent a physical rod."""
         outside_field = candidate.field_relative_y < 0.0 or candidate.field_relative_y > 1.0
+        shadow_score = float(next(item for item in candidate.diagnostics if item.startswith("shadow_band=")).removeprefix("shadow_band="))
+        if (
+            not outside_field
+            and shadow_score >= self._config.minimum_shadow_band_score
+            and candidate.player_colour_evidence < self._config.minimum_shadow_colour_evidence
+        ):
+            return False
         return (
             candidate.confidence >= (
                 self._config.minimum_goal_rod_confidence
@@ -195,18 +215,109 @@ class RodDetector:
             return 0.0
         return float(np.clip(np.std(values) / 64.0, 0.0, 1.0))
 
-    def _merge_fragments(self, candidates: list[RodCandidate]) -> list[RodCandidate]:
-        """Merge nearby Hough fragments while preserving the strongest diagnostics."""
+    @staticmethod
+    def _line_shadow_score(
+        frame: np.ndarray,
+        start: Point,
+        end: Point,
+        gray_image: np.ndarray | None = None,
+    ) -> float:
+        """Measure whether a candidate is a dark band relative to parallel neighbours."""
+        gray = gray_image if gray_image is not None else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        direction = np.asarray((end[0] - start[0], end[1] - start[1]), dtype=np.float32)
+        length = float(np.linalg.norm(direction))
+        if length == 0.0:
+            return 0.0
+        normal = np.asarray((-direction[1], direction[0]), dtype=np.float32) / length
+        offset = normal * 9.0
+
+        def band_mean(displacement: np.ndarray) -> float:
+            first = np.asarray(start, dtype=np.float32) + displacement
+            last = np.asarray(end, dtype=np.float32) + displacement
+            mask = np.zeros(gray.shape, dtype=np.uint8)
+            cv2.line(
+                mask,
+                (int(round(first[0])), int(round(first[1]))),
+                (int(round(last[0])), int(round(last[1]))),
+                255,
+                7,
+            )
+            values = gray[mask > 0]
+            return float(np.mean(values)) if values.size else 0.0
+
+        centre = band_mean(np.zeros(2, dtype=np.float32))
+        neighbours = max(band_mean(offset), band_mean(-offset))
+        return float(np.clip((neighbours - centre) / 255.0, 0.0, 1.0))
+
+    def _merge_fragments(
+        self,
+        frame: np.ndarray,
+        field_geometry: FieldGeometry,
+        candidates: list[RodCandidate],
+        hsv_image: np.ndarray,
+        gray_image: np.ndarray,
+    ) -> list[RodCandidate]:
+        """Fit and rescore one physical line from same-row Hough fragments."""
         merged: list[list[RodCandidate]] = []
         separation = self._config.minimum_rod_cluster_separation
-        for candidate in sorted(candidates, key=lambda item: item.field_relative_y):
-            cluster = next((cluster for cluster in merged if abs(cluster[-1].field_relative_y - candidate.field_relative_y) <= separation), None)
-            if cluster is None:
-                merged.append([candidate])
-            else:
-                cluster.append(candidate)
+        regions = (
+            tuple(candidate for candidate in candidates if candidate.field_relative_y < 0.0),
+            tuple(candidate for candidate in candidates if 0.0 <= candidate.field_relative_y <= 1.0),
+            tuple(candidate for candidate in candidates if candidate.field_relative_y > 1.0),
+        )
+        for region in regions:
+            region_clusters: list[list[RodCandidate]] = []
+            for candidate in sorted(region, key=lambda item: item.field_relative_y):
+                cluster = next((cluster for cluster in region_clusters if abs(cluster[-1].field_relative_y - candidate.field_relative_y) <= separation), None)
+                if cluster is None:
+                    region_clusters.append([candidate])
+                else:
+                    cluster.append(candidate)
+            merged.extend(region_clusters)
         result: list[RodCandidate] = []
         for cluster in merged:
-            strongest = max(cluster, key=lambda item: item.confidence)
-            result.append(strongest)
+            line = self._merged_line(cluster)
+            candidate = self._score_line(
+                frame,
+                field_geometry,
+                line,
+                hsv_image=hsv_image,
+                gray_image=gray_image,
+            )
+            if candidate is not None:
+                result.append(candidate)
         return result
+
+    def _deduplicate_candidates(self, candidates: list[RodCandidate]) -> list[RodCandidate]:
+        """Keep the strongest candidate for each physical rod row."""
+        merged: list[list[RodCandidate]] = []
+        separation = self._config.minimum_rod_cluster_separation
+        regions = (
+            tuple(candidate for candidate in candidates if candidate.field_relative_y < 0.0),
+            tuple(candidate for candidate in candidates if 0.0 <= candidate.field_relative_y <= 1.0),
+            tuple(candidate for candidate in candidates if candidate.field_relative_y > 1.0),
+        )
+        for region in regions:
+            region_clusters: list[list[RodCandidate]] = []
+            for candidate in sorted(region, key=lambda item: item.field_relative_y):
+                cluster = next((cluster for cluster in region_clusters if abs(cluster[-1].field_relative_y - candidate.field_relative_y) <= separation), None)
+                if cluster is None:
+                    region_clusters.append([candidate])
+                else:
+                    cluster.append(candidate)
+            merged.extend(region_clusters)
+        return [max(cluster, key=lambda item: item.confidence) for cluster in merged]
+
+    @staticmethod
+    def _merged_line(candidates: Sequence[RodCandidate]) -> tuple[float, float, float, float]:
+        """Fit a single segment spanning the endpoints of a Hough fragment cluster."""
+        points = np.asarray([point for candidate in candidates for point in candidate.line], dtype=np.float32)
+        if len(points) == 2:
+            return (*points[0], *points[1])
+        direction_x, direction_y, origin_x, origin_y = cv2.fitLine(points, cv2.DIST_L2, 0, 0.01, 0.01).flatten()
+        direction = np.asarray((direction_x, direction_y), dtype=np.float32)
+        origin = np.asarray((origin_x, origin_y), dtype=np.float32)
+        projections = (points - origin) @ direction
+        start = origin + direction * float(np.min(projections))
+        end = origin + direction * float(np.max(projections))
+        return (float(start[0]), float(start[1]), float(end[0]), float(end[1]))
