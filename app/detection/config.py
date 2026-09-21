@@ -56,6 +56,8 @@ class DetectionConfig:
     field_contour_agreement_confidence_weight: float = 0.15
     # Requires a field candidate to meet this confidence before consensus.
     minimum_field_confidence: float = 0.50
+    # Routes a completed calibration to review when its global confidence is lower.
+    minimum_calibration_confidence: float = 0.60
     # Rejects Hough quadrilaterals that do not sufficiently cover the field contour.
     minimum_hough_contour_iou: float = 0.70
     # Rejects consensus when any corner moves farther than this across frames.
