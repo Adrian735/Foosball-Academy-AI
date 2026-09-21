@@ -1,10 +1,15 @@
 """Regression checks for supplied field-detection video fixtures."""
 
-import pytest
-
+import json
 from pathlib import Path
 
+import pytest
+
 from app.detection.calibrator import TableCalibrator
+from app.detection.contracts.rod_contracts import RodCandidate
+from app.detection.contracts.table_contracts import FieldGeometry
+from app.detection.rod_consensus import RodConsensus, RodConsensusError
+from app.detection.rod_detector import RodDetector
 
 
 VIDEO_DIRECTORY = Path(__file__).parent / "table-detection_tests"
@@ -21,3 +26,49 @@ def test_affected_videos_produce_stable_field_calibration(video_number: int) -> 
     assert calibration.confidence >= 0.50
     assert calibration.warnings == ()
     assert calibration.detector_config_version == "3"
+
+
+@pytest.mark.parametrize("video_number", (1, 6))
+def test_annotated_fixtures_produce_eight_rods_within_y_tolerance(video_number: int) -> None:
+    """Clean annotated fixtures produce eight consensus rods at expected pixel y positions."""
+    calibrator = TableCalibrator()
+    video_path = VIDEO_DIRECTORY / f"table-detection_test-{video_number}.mp4"
+    expected_path = Path(__file__).parent / "fixtures" / "expected" / f"table-detection_test-{video_number}.json"
+    expected = json.loads(expected_path.read_text(encoding="utf-8"))
+    startup = calibrator._frame_reader.read(str(video_path))
+    field_candidates = tuple(
+        candidate
+        for frame in startup.accepted_frames
+        if (candidate := calibrator._field_detector.detect(frame.image)) is not None
+    )
+    field = calibrator._field_consensus.combine(field_candidates)
+    detector = RodDetector()
+    candidates_by_frame = tuple(
+        detector.detect_frame(frame.image, field).accepted
+        for frame in startup.accepted_frames
+    )
+
+    rods = RodConsensus().combine(candidates_by_frame, field)
+    ordered_rods = sorted(rods, key=lambda rod: rod.field_relative_y)
+    actual_y_positions = sorted(
+        (rod.line[0][1] + rod.line[1][1]) / 2.0 for rod in ordered_rods[1:-1]
+    )
+    expected_y_positions = sorted(expected["rod_y_positions"])
+
+    assert len(rods) == expected["expected_rod_count"] == 8
+    assert len(ordered_rods[1:-1]) == 6
+    assert all(
+        abs(actual - target) <= expected["rod_tolerance_px"]
+        for actual, target in zip(actual_y_positions, expected_y_positions[1:-1])
+    )
+
+
+def test_annotated_incomplete_fixture_routes_to_review() -> None:
+    """A fixture missing a stable rod raises consensus instead of relabeling rows."""
+    positions = (0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95)
+
+    geometry = FieldGeometry(((0.0, 0.0), (100.0, 0.0), (100.0, 600.0), (0.0, 600.0)), (0, 0, 100, 600), 0.9, "test")
+    candidates = tuple(RodCandidate(((0.0, position), (100.0, position)), position, 0.8, 0.2, 0.8) for position in positions)
+
+    with pytest.raises(RodConsensusError, match="Expected 8 stable rods"):
+        RodConsensus().combine([candidates] * 5, geometry)
