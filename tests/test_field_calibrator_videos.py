@@ -28,6 +28,39 @@ def test_affected_videos_produce_stable_field_calibration(video_number: int) -> 
     assert calibration.detector_config_version == "3"
 
 
+def test_calibrate_public_entry_point_returns_field_and_rods() -> None:
+    """The public facade coordinates field and strict rod consensus."""
+    calibration = TableCalibrator().calibrate(
+        str(VIDEO_DIRECTORY / "table-detection_test-1.mp4")
+    )
+
+    assert calibration.field is not None
+    assert len(calibration.rods) == 8
+    assert calibration.warnings == ()
+
+
+@pytest.mark.parametrize(
+    ("video_number", "expects_rods"),
+    ((2, False), (4, False), (5, False), (6, True)),
+)
+def test_calibrate_public_entry_point_routes_ambiguous_layouts_to_review(
+    video_number: int,
+    expects_rods: bool,
+) -> None:
+    """The facade never converts an ambiguous rod layout into a success."""
+    calibration = TableCalibrator().calibrate(
+        str(VIDEO_DIRECTORY / f"table-detection_test-{video_number}.mp4")
+    )
+
+    assert bool(calibration.rods) is expects_rods
+    if expects_rods:
+        assert calibration.warnings == ()
+    else:
+        assert calibration.field is not None
+        assert calibration.warnings
+        assert calibration.warnings[0].startswith("Rod consensus requires review:")
+
+
 @pytest.mark.parametrize("video_number", (1, 6))
 def test_annotated_fixtures_produce_eight_rods_within_y_tolerance(video_number: int) -> None:
     """Clean annotated fixtures produce eight consensus rods at expected pixel y positions."""

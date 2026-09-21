@@ -67,6 +67,53 @@ class TableCalibrator:
             detector_config_version=self._config.detector_config_version,
         )
 
+    def calibrate(self, video_path: str) -> TableCalibration:
+        """Build a complete field and rod calibration from one video path.
+
+        Field or rod consensus failures are returned as warnings so callers can
+        route the submission to review without treating it as an exercise
+        result. Video validation errors remain exceptions from the startup
+        reader.
+        """
+        startup = self._frame_reader.read(video_path)
+        field_candidates = tuple(
+            candidate
+            for frame in startup.accepted_frames
+            if (candidate := self._field_detector.detect(frame.image)) is not None
+        )
+        warnings: list[str] = []
+        if not field_candidates:
+            warnings.append("No field candidate was detected in accepted startup frames")
+            field = None
+        else:
+            try:
+                field = self._field_consensus.combine(field_candidates)
+            except FieldConsensusError as error:
+                field = None
+                warnings.append(str(error))
+
+        rods = ()
+        if field is not None:
+            rod_detector = self._rod_detector_factory(self._config)
+            candidates_by_frame = tuple(
+                rod_detector.detect_frame(frame.image, field).accepted
+                for frame in startup.accepted_frames
+            )
+            try:
+                rods = tuple(RodConsensus(self._config).combine(candidates_by_frame, field))
+            except RodConsensusError as error:
+                warnings.append(f"Rod consensus requires review: {error}")
+
+        return TableCalibration(
+            metadata=startup.metadata,
+            sampled_frame_quality=startup.frame_quality,
+            field=field,
+            rods=rods,
+            confidence=field.confidence if field is not None else 0.0,
+            warnings=tuple(warnings),
+            detector_config_version=self._config.detector_config_version,
+        )
+
     def write_field_debug_image(
         self,
         video_path: str,
