@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 from app.detection.config import DEFAULT_DETECTION_CONFIG, DetectionConfig
-from app.detection.contracts.rod_contracts import RodCandidate
+from app.detection.contracts.rod_contracts import RodCandidate, RodDetectionResult
 from app.detection.contracts.table_contracts import FieldGeometry, Point
 from app.detection.geometry import field_to_canonical
 
@@ -27,6 +27,10 @@ class RodDetector:
 
     def detect(self, frame: np.ndarray, field_geometry: FieldGeometry) -> list[RodCandidate]:
         """Return scored rod candidates whose lines satisfy the configured geometry gates."""
+        return list(self.detect_frame(frame, field_geometry).accepted)
+
+    def detect_frame(self, frame: np.ndarray, field_geometry: FieldGeometry) -> RodDetectionResult:
+        """Return accepted and rejected candidates for one calibrated frame."""
         if frame.ndim != 3 or frame.shape[2] != 3:
             raise ValueError("Rod detection expects a BGR color image")
 
@@ -49,7 +53,7 @@ class RodDetector:
         )
         if lines is None:
             self._last_rejected_candidates = ()
-            return []
+            return RodDetectionResult(())
 
         accepted: list[RodCandidate] = []
         rejected: list[RodCandidate] = []
@@ -73,7 +77,10 @@ class RodDetector:
         merged_rejected = self._merge_fragments(frame, field_geometry, rejected, hsv, gray)
         promoted = [candidate for candidate in merged_rejected if self._is_accepted(candidate)]
         self._last_rejected_candidates = tuple(candidate for candidate in merged_rejected if not self._is_accepted(candidate))
-        return self._deduplicate_candidates([*accepted, *promoted])
+        return RodDetectionResult(
+            accepted=tuple(self._deduplicate_candidates([*accepted, *promoted])),
+            rejected=self._last_rejected_candidates,
+        )
 
     def _score_line(
         self,

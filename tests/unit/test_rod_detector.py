@@ -32,6 +32,19 @@ def test_detector_returns_scored_horizontal_rod_candidates() -> None:
     assert all(-1.0 <= candidate.field_relative_y <= 2.0 for candidate in candidates)
 
 
+def test_detector_exposes_accepted_and_rejected_candidates_as_one_result() -> None:
+    """The replacement boundary returns diagnostics without mutable state coupling."""
+    image = np.zeros((400, 600, 3), dtype=np.uint8)
+    cv2.fillConvexPoly(image, np.asarray(_field().corners, dtype=np.int32), (40, 150, 80))
+    cv2.line(image, (150, 100), (190, 180), (240, 240, 240), 3)
+
+    result = RodDetector().detect_frame(image, _field())
+
+    assert isinstance(result.accepted, tuple)
+    assert isinstance(result.rejected, tuple)
+    assert all(isinstance(candidate.to_dict(), dict) for candidate in result.rejected)
+
+
 def test_detector_rejects_dark_shadow_band_without_player_evidence() -> None:
     """A broad dark field shadow is not accepted as a physical rod."""
     image = np.full((400, 600, 3), (40, 150, 80), dtype=np.uint8)

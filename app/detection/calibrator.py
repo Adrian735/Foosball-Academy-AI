@@ -1,11 +1,13 @@
 """Field-only static calibration for submitted videos."""
 
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 import cv2
 
 from app.detection.config import DEFAULT_DETECTION_CONFIG, DetectionConfig
+from app.detection.contracts.rod_contracts import RodDetectorProtocol
 from app.detection.contracts.table_contracts import TableCalibration
 from app.detection.debug_renderer import render_field_detection, render_rod_candidates, render_stable_rods, write_debug_image
 from app.detection.field_consensus import FieldConsensus, FieldConsensusError
@@ -18,12 +20,17 @@ from app.detection.startup_frames import StartupFrameReader
 class TableCalibrator:
     """Build a static field calibration without depending on the web stack."""
 
-    def __init__(self, config: DetectionConfig = DEFAULT_DETECTION_CONFIG) -> None:
+    def __init__(
+        self,
+        config: DetectionConfig = DEFAULT_DETECTION_CONFIG,
+        rod_detector_factory: Callable[[DetectionConfig], RodDetectorProtocol] = RodDetector,
+    ) -> None:
         """Create a calibrator with the shared startup, detector, and consensus config."""
         self._config = config
         self._frame_reader = StartupFrameReader(config)
         self._field_detector = FieldDetector(config)
         self._field_consensus = FieldConsensus(config)
+        self._rod_detector_factory = rod_detector_factory
 
     def calibrate_field(self, video_path: str) -> TableCalibration:
         """Detect and combine playable-field geometry from a video startup window.
@@ -85,16 +92,16 @@ class TableCalibrator:
             ("No startup frame passed the quality gate", *calibration.warnings),
         )
         if calibration.field is not None:
-            rod_detector = RodDetector(self._config)
+            rod_detector = self._rod_detector_factory(self._config)
             candidates_by_frame = []
             first_frame_candidates = []
             first_frame_rejected = ()
             for sampled_frame in startup.accepted_frames:
-                candidates = rod_detector.detect(sampled_frame.image, calibration.field)
-                candidates_by_frame.append(candidates)
+                result = rod_detector.detect_frame(sampled_frame.image, calibration.field)
+                candidates_by_frame.append(result.accepted)
                 if sampled_frame.frame_index == frame_index:
-                    first_frame_candidates = candidates
-                    first_frame_rejected = rod_detector.rejected_candidates
+                    first_frame_candidates = list(result.accepted)
+                    first_frame_rejected = result.rejected
             accepted_candidates = first_frame_candidates
             rejected_candidates = first_frame_rejected
             stable_rods = ()
