@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "annotation_type": "ball_tracking",
+  "status": "awaiting_human_annotation",
+  "requirements": {
+    "minimum_duration_seconds": 5.0,
+    "minimum_width": 1280,
+    "minimum_height": 720,
+    "coordinate_system": "source_pixels"
+  },
+  "candidates": [
+    {
+      "fixture": "clean_control",
+      "source_video": "tests/table-detection_tests/table-detection_test-1.mp4",
+      "expected_calibration": "supported",
+      "annotation": "required"
+    },
+    {
+      "fixture": "moderate_motion",
+      "source_video": "tests/table-detection_tests/table-detection_test-6.mp4",
+      "expected_calibration": "supported",
+      "annotation": "required"
+    },
+    {
+      "fixture": "occlusion_or_lighting",
+      "source_video": "tests/table-detection_tests/table-detection_test-2.mp4",
+      "expected_calibration": "review",
+      "annotation": "required_if_ball_visible"
+    },
+    {
+      "fixture": "distractor_or_ambiguous",
+      "source_video": "tests/table-detection_tests/table-detection_test-5.mp4",
+      "expected_calibration": "review",
+      "annotation": "required_if_ball_visible"
+    },
+    {
+      "fixture": "no_ball_or_unsupported_layout",
+      "source_video": "tests/table-detection_tests/table-detection_test-4.mp4",
+      "expected_calibration": "review",
+      "annotation": "required"
+    },
+    {
+      "fixture": "invalid_portrait_resolution",
+      "source_video": "tests/table-detection_tests/table-detection_test-3.mp4",
+      "expected_calibration": "invalid_resolution",
+      "annotation": "not_applicable"
+    }
+  ]
+}

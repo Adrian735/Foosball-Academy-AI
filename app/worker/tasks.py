@@ -1,4 +1,6 @@
 from app.database import SessionLocal
+from app.ball_tracking.frame_reader import BallVideoReadError, SequentialFrameReader
+from app.ball_tracking.tracker import BallTracker
 from app.detection.calibrator import TableCalibrator
 from app.detection.config import DEFAULT_DETECTION_CONFIG
 from app.detection.contracts.table_contracts import TableCalibration
@@ -43,6 +45,36 @@ def process_submission(submission_id: str) -> None:
             "calibration_requires_review": _calibration_requires_review(calibration),
         }
         submission.confidence = calibration.confidence
+        submission.status = SubmissionStatus.PENDING_REVIEW
+
+        if _calibration_requires_review(calibration):
+            submission.metrics["ball_tracking"] = None
+            submission.metrics["ball_tracking_skipped"] = "calibration_requires_review"
+            db.commit()
+            return
+
+        try:
+            read_result = SequentialFrameReader().read(submission.video_url)
+            tracking_result = BallTracker().track(
+                read_result.frames,
+                calibration.field,  # type: ignore[arg-type]
+                read_result.metadata,
+                calibration.detector_config_version,
+                read_result.warnings,
+            )
+        except (BallVideoReadError, ValueError) as error:
+            submission.metrics["ball_tracking"] = None
+            submission.metrics["ball_tracking_failure"] = {
+                "type": "tracking_input",
+                "message": str(error),
+            }
+            submission.confidence = min(submission.confidence, 0.0)
+            db.commit()
+            return
+
+        submission.metrics["ball_tracking"] = tracking_result.to_dict()
+        submission.metrics["ball_tracking_requires_review"] = bool(tracking_result.track.warnings)
+        submission.confidence = min(submission.confidence, tracking_result.track.confidence)
         submission.status = SubmissionStatus.PENDING_REVIEW
         db.commit()
     finally:

@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "fixture": "ball-detection_test-2.mp4",
+  "source_video": "tests/ball-detection_tests/ball-detection_test-2.mp4",
+  "video": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30.0,
+    "frame_count": 2308,
+    "duration_seconds": 13.333333333333334
+  },
+  "annotation": {
+    "status": "human_verified",
+    "coordinate_system": "source_pixels",
+    "center_tolerance_px": 12.0,
+    "sampling": {
+      "mode": "fixed_frame_stride",
+      "every_n_frames": 10
+    },
+    "frame_limit": 400,
+    "samples": [
+      {
+        "frame_index": 200,
+        "timestamp_seconds": 6.666666666666667,
+        "visible": true,
+        "center": [
+          930,
+          694
+        ]
+      },
+      {
+        "frame_index": 210,
+        "timestamp_seconds": 7.0,
+        "visible": true,
+        "center": [
+          926,
+          692
+        ]
+      },
+      {
+        "frame_index": 220,
+        "timestamp_seconds": 7.333333333333333,
+        "visible": true,
+        "center": [
+          916,
+          692
+        ]
+      },
+      {
+        "frame_index": 230,
+        "timestamp_seconds": 7.666666666666667,
+        "visible": true,
+        "center": [
+          916,
+          692
+        ]
+      },
+      {
+        "frame_index": 240,
+        "timestamp_seconds": 8.0,
+        "visible": true,
+        "center": [
+          916,
+          692
+        ]
+      },
+      {
+        "frame_index": 250,
+        "timestamp_seconds": 8.333333333333334,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 260,
+        "timestamp_seconds": 8.666666666666666,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 270,
+        "timestamp_seconds": 9.0,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 280,
+        "timestamp_seconds": 9.333333333333334,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 290,
+        "timestamp_seconds": 9.666666666666666,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 300,
+        "timestamp_seconds": 10.0,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 310,
+        "timestamp_seconds": 10.333333333333334,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 320,
+        "timestamp_seconds": 10.666666666666666,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 330,
+        "timestamp_seconds": 11.0,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 340,
+        "timestamp_seconds": 11.333333333333334,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 350,
+        "timestamp_seconds": 11.666666666666666,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 360,
+        "timestamp_seconds": 12.0,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 370,
+        "timestamp_seconds": 12.333333333333334,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 380,
+        "timestamp_seconds": 12.666666666666666,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 390,
+        "timestamp_seconds": 13.0,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      },
+      {
+        "frame_index": 399,
+        "timestamp_seconds": 13.3,
+        "visible": true,
+        "center": [
+          916,
+          691
+        ]
+      }
+    ]
+  }
+}

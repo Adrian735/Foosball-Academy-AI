@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 
+from app.ball_tracking.contracts import BallTrack, BallTrackingResult
 from app.detection.contracts.rod_contracts import Rod
 from app.detection.contracts.table_contracts import FieldGeometry, TableCalibration
 from app.detection.contracts.video_contracts import VideoMetadata
@@ -44,6 +45,32 @@ class _Calibrator:
         if isinstance(self._outcome, VideoValidationError):
             raise self._outcome
         return self._outcome
+
+
+class _Reader:
+    """Frame-reader double returning a prepared decoded input."""
+
+    def __init__(self, metadata: VideoMetadata) -> None:
+        """Store metadata for the synthetic read result."""
+        self._result = SimpleNamespace(metadata=metadata, frames=(), warnings=())
+
+    def read(self, _video_path: str) -> SimpleNamespace:
+        """Return the prepared empty frame sequence."""
+        return self._result
+
+
+class _Tracker:
+    """Tracker double recording the calibration geometry it receives."""
+
+    def __init__(self, result: BallTrackingResult) -> None:
+        """Store the synthetic tracking result."""
+        self.result = result
+        self.called = False
+
+    def track(self, *_args: object, **_kwargs: object) -> BallTrackingResult:
+        """Return the result and record that tracking was invoked."""
+        self.called = True
+        return self.result
 
 
 def _calibration(
@@ -90,21 +117,30 @@ def _submission() -> SimpleNamespace:
 
 
 def test_process_submission_persists_clean_calibration(monkeypatch) -> None:
-    """A clean calibration is persisted while validation remains pending."""
+    """A clean calibration and ball track are both persisted for review."""
     submission = _submission()
     session = _Session(submission)
     calibration = _calibration()
+    tracking = BallTrackingResult(
+        BallTrack(calibration.metadata.to_dict(), "test", "1", (), 0.9, 0.0, 0.8)
+    )
+    tracker = _Tracker(tracking)
     monkeypatch.setattr(tasks, "SessionLocal", lambda: session)
     monkeypatch.setattr(tasks, "TableCalibrator", lambda: _Calibrator(calibration))
+    monkeypatch.setattr(tasks, "SequentialFrameReader", lambda: _Reader(calibration.metadata))
+    monkeypatch.setattr(tasks, "BallTracker", lambda: tracker)
 
     tasks.process_submission.run("submission-id")
 
     assert submission.status is SubmissionStatus.PENDING_REVIEW
-    assert submission.confidence == calibration.confidence
+    assert submission.confidence == tracking.track.confidence
     assert submission.metrics == {
         "calibration": calibration.to_dict(),
         "calibration_requires_review": False,
+        "ball_tracking": tracking.to_dict(),
+        "ball_tracking_requires_review": False,
     }
+    assert tracker.called
     assert session.commit_count == 2
     assert session.closed
 
@@ -116,6 +152,8 @@ def test_process_submission_routes_calibration_warnings_to_review(monkeypatch) -
     calibration = _calibration(warnings=("Rod consensus requires review: incomplete layout",), rod_count=0)
     monkeypatch.setattr(tasks, "SessionLocal", lambda: session)
     monkeypatch.setattr(tasks, "TableCalibrator", lambda: _Calibrator(calibration))
+    tracker = _Tracker(BallTrackingResult(BallTrack({}, "", "", (), 0.0, 0.0, 0.0)))
+    monkeypatch.setattr(tasks, "BallTracker", lambda: tracker)
 
     tasks.process_submission.run("submission-id")
 
@@ -123,8 +161,41 @@ def test_process_submission_routes_calibration_warnings_to_review(monkeypatch) -
     assert submission.confidence == calibration.confidence
     assert submission.metrics["calibration"] == calibration.to_dict()
     assert submission.metrics["calibration_requires_review"] is True
+    assert submission.metrics["ball_tracking"] is None
+    assert submission.metrics["ball_tracking_skipped"] == "calibration_requires_review"
+    assert not tracker.called
     assert session.commit_count == 2
     assert session.closed
+
+
+def test_process_submission_keeps_low_confidence_track_pending(monkeypatch) -> None:
+    """A low-confidence track is persisted but never auto-approved or rejected."""
+    submission = _submission()
+    session = _Session(submission)
+    calibration = _calibration()
+    tracking = BallTrackingResult(
+        BallTrack(
+            calibration.metadata.to_dict(),
+            "test",
+            "1",
+            (),
+            0.2,
+            1.0,
+            0.2,
+            ("track_coverage_below_threshold",),
+        )
+    )
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: session)
+    monkeypatch.setattr(tasks, "TableCalibrator", lambda: _Calibrator(calibration))
+    monkeypatch.setattr(tasks, "SequentialFrameReader", lambda: _Reader(calibration.metadata))
+    monkeypatch.setattr(tasks, "BallTracker", lambda: _Tracker(tracking))
+
+    tasks.process_submission.run("submission-id")
+
+    assert submission.status is SubmissionStatus.PENDING_REVIEW
+    assert submission.confidence == 0.2
+    assert submission.metrics["ball_tracking_requires_review"] is True
+    assert submission.status not in (SubmissionStatus.APPROVED, SubmissionStatus.REJECTED)
 
 
 def test_process_submission_persists_invalid_video_as_structured_failure(monkeypatch) -> None:
