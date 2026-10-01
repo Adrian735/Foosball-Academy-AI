@@ -15,7 +15,7 @@ class DetectionConfig:
     """
 
     # Identifies the exact threshold set used to produce a calibration result.
-    detector_config_version: str = "3"
+    detector_config_version: str = "5"
     # Limits static calibration to the first seconds of a submitted video.
     calibration_window_seconds: float = 3.0
     # Caps decoded startup frames before sampling to bound processing cost.
@@ -93,7 +93,7 @@ class DetectionConfig:
     # Requires the top goalkeeper row to remain just outside the playing field.
     maximum_top_goal_rod_relative_y: float = -0.02
     # Rejects top candidates far above the supported goalkeeper goal area.
-    minimum_top_goal_rod_relative_y: float = -0.18
+    minimum_top_goal_rod_relative_y: float = -0.25
     # Requires a rod cluster to appear in this fraction of accepted frames.
     minimum_rod_coverage_ratio: float = 0.25
     # Rejects dark shadow bands unless nearby player colours support a rod.

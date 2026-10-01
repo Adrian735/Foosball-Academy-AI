@@ -93,12 +93,33 @@ def test_consensus_rejects_low_coverage_false_positive() -> None:
     assert len(rods) == 8
 
 
+def test_consensus_prefers_geometry_valid_layout_over_stronger_extra_row() -> None:
+    """An extra stable line cannot displace the goalkeeper rod from a valid layout."""
+    positions = (-0.11, 0.05, 0.20, 0.36, 0.52, 0.68, 0.76, 0.84, 1.01)
+    confidence_by_position = {-0.11: 0.73, 0.76: 0.95, 1.01: 0.74}
+    candidates = tuple(_candidate(position, confidence_by_position.get(position, 0.80)) for position in positions)
+
+    rods = RodConsensus().combine([candidates] * 5, _field())
+
+    assert [rod.field_relative_y for rod in rods] == pytest.approx((-0.11, 0.05, 0.20, 0.36, 0.52, 0.68, 0.84, 1.01))
+
+
 def test_consensus_rejects_layout_missing_the_goalkeeper_rod() -> None:
     """An in-field row cannot be silently relabeled as a missing goal rod."""
     positions = (0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95, 1.1)
 
     with pytest.raises(RodConsensusError, match="goal-area envelope"):
         RodConsensus().combine([tuple(_candidate(position) for position in positions)] * 5, _field())
+
+
+def test_consensus_accepts_partially_cropped_goalkeeper_rod() -> None:
+    """A stable goalkeeper rod slightly above the field remains supported."""
+    positions = (-0.22, -0.1, 0.05, 0.2, 0.35, 0.5, 0.65, 0.8)
+
+    rods = RodConsensus().combine([tuple(_candidate(position) for position in positions)] * 5, _field())
+
+    assert len(rods) == 8
+    assert rods[0].field_relative_y == pytest.approx(-0.22)
 
 
 def test_observed_rods_keeps_in_field_rows_when_goalkeeper_validation_fails() -> None:
@@ -122,7 +143,7 @@ def test_observed_rods_limits_debug_output_to_eight_strongest_rows() -> None:
 
 def test_consensus_rejects_goal_frame_line_far_above_the_field() -> None:
     """A distant goal-frame edge cannot be used as the goalkeeper rod."""
-    positions = (-0.25, -0.1, 0.05, 0.2, 0.35, 0.5, 0.65, 0.8)
+    positions = (-0.40, -0.1, 0.05, 0.2, 0.35, 0.5, 0.65, 0.8)
 
     with pytest.raises(RodConsensusError, match="goal-area envelope"):
         RodConsensus().combine([tuple(_candidate(position) for position in positions)] * 5, _field())

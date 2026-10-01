@@ -25,7 +25,7 @@ def test_affected_videos_produce_stable_field_calibration(video_number: int) -> 
     assert calibration.field is not None
     assert calibration.confidence >= 0.50
     assert calibration.warnings == ()
-    assert calibration.detector_config_version == "3"
+    assert calibration.detector_config_version == "5"
 
 
 def test_calibrate_public_entry_point_returns_field_and_rods() -> None:
@@ -41,7 +41,7 @@ def test_calibrate_public_entry_point_returns_field_and_rods() -> None:
 
 @pytest.mark.parametrize(
     ("video_number", "expects_rods"),
-    ((2, False), (4, False), (5, False), (6, True)),
+    ((2, True), (4, False), (5, True), (6, True)),
 )
 def test_calibrate_public_entry_point_routes_ambiguous_layouts_to_review(
     video_number: int,
@@ -61,7 +61,7 @@ def test_calibrate_public_entry_point_routes_ambiguous_layouts_to_review(
         assert calibration.warnings[0].startswith("Rod consensus requires review:")
 
 
-@pytest.mark.parametrize("video_number", (1, 6))
+@pytest.mark.parametrize("video_number", (1, 5, 6))
 def test_annotated_fixtures_produce_eight_rods_within_y_tolerance(video_number: int) -> None:
     """Clean annotated fixtures produce eight consensus rods at expected pixel y positions."""
     calibrator = TableCalibrator()

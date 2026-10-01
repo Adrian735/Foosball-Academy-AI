@@ -1,6 +1,7 @@
 """Combine per-frame rod candidates into a stable Bonzini rod layout."""
 
 from dataclasses import dataclass
+from itertools import combinations
 from statistics import median
 from typing import Iterable, Sequence
 
@@ -61,15 +62,7 @@ class RodConsensus:
         minimum_coverage = self._config.minimum_rod_coverage_ratio * len(frames)
         stable_clusters = [cluster for cluster in clusters if cluster.coverage >= minimum_coverage]
         if len(stable_clusters) > self._config.expected_rod_count:
-            stable_clusters = sorted(
-                stable_clusters,
-                key=lambda cluster: (
-                    cluster.coverage,
-                    max(item[1].confidence for item in cluster.items),
-                ),
-                reverse=True,
-            )[: self._config.expected_rod_count]
-            stable_clusters.sort(key=lambda cluster: cluster.items[0][1].field_relative_y)
+            stable_clusters = self._select_layout_clusters(stable_clusters)
         if len(stable_clusters) != self._config.expected_rod_count:
             raise RodConsensusError(
                 f"Expected {self._config.expected_rod_count} stable rods, found {len(stable_clusters)}"
@@ -94,6 +87,35 @@ class RodConsensus:
                 )
             )
         return rods
+
+    def _select_layout_clusters(self, clusters: Sequence[_RodCluster]) -> list[_RodCluster]:
+        """Choose the strongest geometry-valid layout from persistent candidate rows."""
+        valid_layouts: list[tuple[_RodCluster, ...]] = []
+        for layout in combinations(clusters, self._config.expected_rod_count):
+            try:
+                self._validate_spacing(layout)
+            except RodConsensusError:
+                continue
+            valid_layouts.append(layout)
+        if valid_layouts:
+            return list(
+                max(
+                    valid_layouts,
+                    key=lambda layout: (
+                        sum(cluster.coverage for cluster in layout),
+                        sum(max(item[1].confidence for item in cluster.items) for cluster in layout),
+                    ),
+                )
+            )
+        strongest = sorted(
+            clusters,
+            key=lambda cluster: (
+                cluster.coverage,
+                max(item[1].confidence for item in cluster.items),
+            ),
+            reverse=True,
+        )[: self._config.expected_rod_count]
+        return sorted(strongest, key=lambda cluster: cluster.items[0][1].field_relative_y)
 
     def observed_rods(
         self,

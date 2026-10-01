@@ -13,7 +13,7 @@ VIDEO_DIRECTORY = Path(__file__).parents[1] / "table-detection_tests"
 
 @pytest.mark.parametrize(
     ("video_number", "expects_supported_layout"),
-    ((1, True), (2, False), (3, None), (4, False), (5, False), (6, True)),
+    ((1, True), (2, True), (3, None), (4, False), (5, True), (6, True)),
 )
 def test_calibrate_regresses_every_supplied_fixture(
     video_number: int,
