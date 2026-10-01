@@ -101,6 +101,21 @@ def test_trackable_calibration_rejects_review_warnings() -> None:
         require_trackable_calibration(calibration)
 
 
+def test_trackable_calibration_accepts_default_confidence_boundary() -> None:
+    """The default tracking gate accepts a complete calibration at 0.55."""
+    calibration = table_calibration_from_dict(_calibration_payload(confidence=0.55))
+
+    assert require_trackable_calibration(calibration) is calibration
+
+
+def test_trackable_calibration_rejects_confidence_below_default_boundary() -> None:
+    """The default tracking gate still skips insufficiently reliable calibration."""
+    calibration = table_calibration_from_dict(_calibration_payload(confidence=0.549))
+
+    with pytest.raises(CalibrationLoadError, match="below 0.550"):
+        require_trackable_calibration(calibration)
+
+
 def test_trackable_calibration_rejects_missing_field() -> None:
     """A report without field geometry cannot enter the tracker."""
     calibration = table_calibration_from_dict(_calibration_payload(field=None))

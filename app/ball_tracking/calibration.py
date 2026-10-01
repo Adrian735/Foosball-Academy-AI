@@ -62,7 +62,7 @@ def table_calibration_from_dict(payload: Mapping[str, Any]) -> TableCalibration:
     )
 
 
-def require_trackable_calibration(calibration: TableCalibration, minimum_confidence: float = 0.60) -> TableCalibration:
+def require_trackable_calibration(calibration: TableCalibration, minimum_confidence: float = 0.55) -> TableCalibration:
     """Reject calibration that cannot safely constrain ball detection."""
     if calibration.field is None:
         raise CalibrationLoadError("Calibration has no field geometry")
