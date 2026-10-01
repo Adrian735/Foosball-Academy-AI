@@ -120,6 +120,22 @@ pytest
 
 ## Tools
 
+#### Interactive CV debug UI
+
+Use the local Streamlit UI to inspect a video before creating a submission.
+It runs the existing table calibration and ball tracker directly, then offers
+the calibration report, ball-tracking report, and an annotated MP4 with field,
+rod, candidate, observation, and confidence diagnostics.
+
+```bash
+streamlit run tools/debug_ui.py
+```
+
+This is a development tool only. A calibration that requires review still
+produces its report but intentionally skips ball tracking. The annotated
+browser preview is encoded through the local `ffmpeg` executable, which must
+be installed and available on `PATH`.
+
 #### Table-detection annotations
 
 These are development and regression-test tools. They are not used during

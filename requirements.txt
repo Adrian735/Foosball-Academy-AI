@@ -11,3 +11,4 @@ numpy
 httpx2
 pytest
 opencv-python
+streamlit
