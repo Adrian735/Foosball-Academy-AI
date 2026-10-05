@@ -39,10 +39,11 @@ event-specific tests exist yet.
      unresolved loss is represented by a result warning and no reacquired event.
   5. Existing track warnings and conservative confidence are retained; invalid
      observation ordering is rejected explicitly.
-- [ ] **REQ-EVT-004 — Goal crossings:** Detect a ball crossing a configured goal
-  mouth/line from consecutive supported observations, with side, direction,
-  timing, confidence, and source frames. Do not treat every field exit as a
-  goal.
+- [ ] **REQ-EVT-004 — Goal crossings:** Detect the visible goal aperture as
+  part of static table calibration, extend ball tracking into calibrated goal
+  mouths, and identify a ball crossing a mouth between consecutive supported
+  observations. Include side, direction, source frames/timestamps, confidence,
+  and diagnostics; do not treat every field exit as a goal.
 - [ ] **REQ-EVT-005 — Player proximity:** When a separately produced player
   position track is available, derive ball-entered/left-proximity events and
   elapsed duration for the target player. This is an event signal only, not
@@ -91,12 +92,11 @@ event-specific tests exist yet.
 
 ## Decisions and Gating Questions
 
-1. **Goal geometry and direction:** `FieldGeometry` identifies the playable
-   field but does not define the opening/goal-mouth dimensions or which side is
-   the player's attacking side. Before accepting goal-event thresholds, confirm
-   the goal-mouth geometry and orientation convention against the supported
-   Bonzini setup. Until then, goal events must be marked unavailable rather
-   than approximated as any field-boundary exit.
+1. **Goal geometry and direction:** Visually detect each goal aperture from
+   accepted startup frames and serialize its bounds in `TableCalibration`.
+   Label ends in canonical table coordinates, not player/team orientation;
+   event analysis reports each end and direction without assigning an attack
+   side. Weak or occluded aperture evidence stays unavailable with diagnostics.
 2. **Player identity and proximity:** Existing `Rod` values describe rod lines,
    not individual player positions. Before implementing REQ-EVT-005, agree on
    the upstream player-position contract and what “under the player” means
@@ -145,17 +145,38 @@ event-specific tests exist yet.
 - Emit diagnostics when a gap is unresolved or confidence is insufficient to
   support an event boundary.
 
-### Step 3: Add goal-crossing detection behind a geometry gate
+### REQ-EVT-004 acceptance criteria
+
+1. Static calibration detects each visually observable goal aperture from the
+   supported Bonzini startup frames and exposes stable canonical bounds plus
+   confidence/diagnostics in `TableCalibration`.
+2. Low-confidence or occluded goal geometry remains unavailable and does not
+   get replaced with a guessed default.
+3. Ball detection/tracking accepts measurements inside configured goal mouths
+   as well as the playable field; unsupported out-of-field regions remain
+   masked.
+4. A goal event requires a segment between consecutive, detected, sourced ball
+   observations that intersects a calibrated aperture. Missed, uncertain, or
+   non-adjacent frames cannot be bridged.
+5. Event payload includes canonical end (`start` or `end`), inward/outward
+   direction, source evidence, and confidence; duplicate jitter/reversal does
+   not report repeated goals.
+6. Synthetic visual-aperture and ball-crossing tests pass, and supported-video
+   event annotation is added before production threshold tuning.
+
+### Step 3: Detect goal apertures and crossings
 
 - **Requirements:** REQ-EVT-002, REQ-EVT-004, REQ-EVT-006, REQ-EVT-007
-- After the goal-mouth and orientation convention are confirmed, detect
-  crossings in canonical field coordinates using consecutive supported
-  observations.
-- Require evidence to cross the configured mouth/line in the correct order;
-  suppress duplicates from jitter/reversal and refuse to bridge unsupported
-  observation gaps.
-- Record the crossed side and direction without deciding whether it counts
-  toward an exercise.
+- Add a separate visually based goal-aperture detector under
+  `app/detection/`, with per-frame evidence and cross-frame consensus.
+- Include goal bounds in `TableCalibration`, preserving geometry confidence
+  and diagnostics. Do not change field/rod confidence or treat missing goal
+  detections as exercise failures.
+- Extend the ball detector's allowed mask with only the calibrated aperture
+  regions and retain canonical positions beyond the field polygon.
+- Require a direct segment between adjacent detected observations to cross a
+  detected mouth. Suppress duplicate crossings and report end/direction.
+- Never infer a goal through missing or uncertain ball observations.
 
 ### Step 4: Add player-proximity events when upstream tracking is ready
 
@@ -207,13 +228,28 @@ event-specific tests exist yet.
 
 ### Phase 2 — Goal-line crossing events
 
-- [ ] T005 [Plan:3.1] Confirm supported goal-mouth geometry and side/direction
-  conventions; record them as versioned configuration inputs.
-- [ ] T006 [Plan:3.1] Add goal-crossing events, duplicate suppression, and
-  gap-safe evidence handling to `app/event_analysis/analyzer.py`.
-- [ ] T007 [Plan:3.1] Add synthetic goal-crossing tests and human-annotated
-  Bonzini event regression cases under `tests/fixtures/expected/` and
-  `tests/integration/`.
+- [x] T005 [Plan:3.1] Add immutable, serializable canonical `GoalMouth`
+  geometry and separate diagnostics to
+  `app/detection/contracts/table_contracts.py`.
+- [x] T006 [Plan:3.1] Detect the visible goal aperture from accepted startup
+  frames and combine stable per-end bounds in
+  `app/detection/goal_mouth_detector.py`.
+- [x] T007 [Plan:3.1] Integrate detected goal geometry into both table
+  calibration entry points and debug renderers without changing field/rod
+  review gates.
+- [x] T008 [Plan:3.1] Permit yellow-ball tracking only inside calibrated
+  apertures in `app/ball_tracking/detector.py` and propagate geometry through
+  `tracker.py`, `runner.py`, API, and worker callers.
+- [x] T009 [Plan:3.1] Add goal crossings, explicit end/direction event data,
+  adjacency and gap checks, and duplicate suppression in
+  `app/event_analysis/analyzer.py`.
+- [ ] T010 [Plan:3.1] Add synthetic visual and trajectory tests plus manually
+  reviewed Bonzini goal annotations under `tests/fixtures/expected/`.
+
+REQ-EVT-004 remains gated on T010's manually reviewed real-video goal
+annotations. The detector and crossing pipeline are implemented and synthetic
+tests cover their contracts, but production threshold tuning and real-world
+accuracy claims must wait for that fixture.
 
 ### Phase 3 — Player-proximity event signals
 

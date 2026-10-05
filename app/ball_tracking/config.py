@@ -10,7 +10,7 @@ HSVRange = Tuple[Tuple[int, int, int], Tuple[int, int, int]]
 class BallTrackingConfig:
     """Versioned ball detector and track-association thresholds."""
 
-    config_version: str = "1"
+    config_version: str = "2"
     yellow_hsv_range: HSVRange = ((18, 80, 80), (32, 255, 255))
     recovery_yellow_hsv_range: HSVRange = ((16, 60, 60), (34, 255, 255))
     morphology_kernel_size: int = 5
@@ -30,6 +30,7 @@ class BallTrackingConfig:
     minimum_detection_confidence: float = 0.45
     minimum_track_coverage: float = 0.60
     maximum_unresolved_gap_seconds: float = 0.75
+    goal_tracking_padding_canonical: float = 12.0
 
 
 DEFAULT_BALL_TRACKING_CONFIG = BallTrackingConfig()

@@ -25,7 +25,7 @@ def test_affected_videos_produce_stable_field_calibration(video_number: int) -> 
     assert calibration.field is not None
     assert calibration.confidence >= 0.50
     assert calibration.warnings == ()
-    assert calibration.detector_config_version == "5"
+    assert calibration.detector_config_version == "6"
 
 
 def test_calibrate_public_entry_point_returns_field_and_rods() -> None:

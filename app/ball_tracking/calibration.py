@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from app.detection.contracts.rod_contracts import Rod
-from app.detection.contracts.table_contracts import FieldGeometry, TableCalibration
+from app.detection.contracts.table_contracts import (
+    FieldGeometry,
+    GoalEnd,
+    GoalMouth,
+    TableCalibration,
+)
 from app.detection.contracts.video_contracts import FrameQuality, VideoMetadata
 
 
@@ -27,11 +32,23 @@ def load_table_calibration(path: str | Path) -> TableCalibration:
 def table_calibration_from_dict(payload: Mapping[str, Any]) -> TableCalibration:
     """Convert an exact calibration mapping into its immutable contract."""
     _require_mapping(payload, "calibration")
-    _check_keys(
-        payload,
-        {"metadata", "sampled_frame_quality", "field", "rods", "confidence", "warnings", "detector_config_version"},
-        "calibration",
-    )
+    required_keys = {
+        "metadata",
+        "sampled_frame_quality",
+        "field",
+        "rods",
+        "confidence",
+        "warnings",
+        "detector_config_version",
+    }
+    allowed_keys = required_keys | {"goal_mouths", "goal_warnings"}
+    if set(payload) - allowed_keys or required_keys - set(payload):
+        details = []
+        if required_keys - set(payload):
+            details.append("missing " + ", ".join(sorted(required_keys - set(payload))))
+        if set(payload) - allowed_keys:
+            details.append("unknown " + ", ".join(sorted(set(payload) - allowed_keys)))
+        raise CalibrationLoadError(f"Invalid calibration: {'; '.join(details)}")
     metadata_data = _mapping(payload["metadata"], "metadata")
     _check_keys(
         metadata_data,
@@ -51,6 +68,14 @@ def table_calibration_from_dict(payload: Mapping[str, Any]) -> TableCalibration:
     qualities = tuple(_frame_quality(_mapping(item, "sampled_frame_quality item")) for item in quality_items)
     field = _field_geometry(payload["field"])
     rods = tuple(_rod(_mapping(item, "rod")) for item in _sequence(payload["rods"], "rods"))
+    goal_mouths = tuple(
+        _goal_mouth(_mapping(item, "goal mouth"))
+        for item in _sequence(payload.get("goal_mouths", []), "goal_mouths")
+    )
+    goal_warnings = tuple(
+        _string(item, "goal_warnings item")
+        for item in _sequence(payload.get("goal_warnings", []), "goal_warnings")
+    )
     return TableCalibration(
         metadata=metadata,
         sampled_frame_quality=qualities,
@@ -59,6 +84,8 @@ def table_calibration_from_dict(payload: Mapping[str, Any]) -> TableCalibration:
         confidence=_unit_float(payload["confidence"], "confidence"),
         warnings=tuple(_string(item, "warnings item") for item in _sequence(payload["warnings"], "warnings")),
         detector_config_version=_string(payload["detector_config_version"], "detector_config_version"),
+        goal_mouths=goal_mouths,
+        goal_warnings=goal_warnings,
     )
 
 
@@ -117,6 +144,36 @@ def _rod(data: Mapping[str, Any]) -> Rod:
         field_relative_y=_number(data["field_relative_y"], "rod.field_relative_y"),
         confidence=_unit_float(data["confidence"], "rod.confidence"),
         player_colour_evidence=_unit_float(data["player_colour_evidence"], "rod.player_colour_evidence"),
+    )
+
+
+def _goal_mouth(data: Mapping[str, Any]) -> GoalMouth:
+    """Validate and reconstruct one visually detected goal aperture."""
+    _check_keys(
+        data,
+        {"end", "opening_bounds", "crossing_line_y", "confidence", "diagnostics"},
+        "goal mouth",
+    )
+    try:
+        end = GoalEnd(_string(data["end"], "goal mouth.end"))
+    except ValueError as error:
+        raise CalibrationLoadError("goal mouth.end must be start or end") from error
+    bounds = tuple(
+        _number(item, "goal mouth.opening_bounds item")
+        for item in _sequence(data["opening_bounds"], "goal mouth.opening_bounds")
+    )
+    if len(bounds) != 4:
+        raise CalibrationLoadError("goal mouth.opening_bounds must contain four numbers")
+    diagnostics = tuple(
+        _string(item, "goal mouth.diagnostics item")
+        for item in _sequence(data["diagnostics"], "goal mouth.diagnostics")
+    )
+    return GoalMouth(
+        end=end,
+        opening_bounds=bounds,  # type: ignore[arg-type]
+        crossing_line_y=_number(data["crossing_line_y"], "goal mouth.crossing_line_y"),
+        confidence=_unit_float(data["confidence"], "goal mouth.confidence"),
+        diagnostics=diagnostics,
     )
 
 

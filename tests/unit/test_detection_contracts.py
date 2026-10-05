@@ -4,7 +4,11 @@ import json
 
 from app.detection.contracts.contracts import FieldGeometry, FrameQuality, Rod, TableCalibration, VideoMetadata
 from app.detection.contracts.rod_contracts import Rod as DirectRod
-from app.detection.contracts.table_contracts import FieldGeometry as DirectFieldGeometry
+from app.detection.contracts.table_contracts import (
+    FieldGeometry as DirectFieldGeometry,
+    GoalEnd,
+    GoalMouth,
+)
 from app.detection.contracts.video_contracts import VideoMetadata as DirectVideoMetadata
 
 
@@ -60,3 +64,44 @@ def test_sampled_frame_quality_exposes_a_rejection_reason() -> None:
     quality = FrameQuality(7, 1.2, 3.0, 10.0, False, "blurred")
 
     assert quality.to_dict()["rejection_reason"] == "blurred"
+
+
+def test_table_calibration_serializes_detected_goal_mouths_and_diagnostics() -> None:
+    """Goal apertures persist independently from field and rod calibration."""
+    metadata = VideoMetadata("video.mp4", 30.0, 150, 1280, 720, 5.0)
+    field = FieldGeometry(
+        ((0.0, 0.0), (1000.0, 0.0), (1000.0, 600.0), (0.0, 600.0)),
+        (0, 0, 1000, 600),
+        0.9,
+        "synthetic",
+    )
+    mouth = GoalMouth(GoalEnd.START, (390.0, -20.0, 610.0, 5.0), 0.0, 0.88)
+    calibration = TableCalibration(
+        metadata, (), field, (), 0.9, goal_mouths=(mouth,), goal_warnings=("end_goal_occluded",)
+    )
+
+    report = calibration.to_dict()
+
+    assert json.loads(json.dumps(report)) == report
+    assert report["goal_mouths"] == [
+        {
+            "end": "start",
+            "opening_bounds": [390.0, -20.0, 610.0, 5.0],
+            "crossing_line_y": 0.0,
+            "confidence": 0.88,
+            "diagnostics": [],
+        }
+    ]
+    assert report["goal_warnings"] == ["end_goal_occluded"]
+
+
+def test_goal_mouth_rejects_invalid_bounds_and_crossing_line() -> None:
+    """Goal geometry requires ordered finite bounds and a valid confidence."""
+    import pytest
+
+    with pytest.raises(ValueError, match="opening_bounds"):
+        GoalMouth(GoalEnd.START, (610.0, -20.0, 390.0, 5.0), 0.0, 0.8)
+    with pytest.raises(ValueError, match="crossing_line_y"):
+        GoalMouth(GoalEnd.START, (390.0, -20.0, 610.0, 5.0), float("nan"), 0.8)
+    with pytest.raises(ValueError, match="confidence"):
+        GoalMouth(GoalEnd.START, (390.0, -20.0, 610.0, 5.0), 0.0, 1.2)

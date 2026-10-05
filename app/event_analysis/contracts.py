@@ -89,6 +89,7 @@ class Event:
     evidence: tuple[EventEvidence, ...]
     confidence: float
     diagnostics: tuple[str, ...] = ()
+    details: tuple[tuple[str, str | int | float | bool | None], ...] = ()
 
     def __post_init__(self) -> None:
         """Validate event evidence, chronological order, and confidence."""
@@ -116,6 +117,20 @@ class Event:
         if any(not isinstance(diagnostic, str) for diagnostic in diagnostics):
             raise ValueError("diagnostics must contain strings")
         object.__setattr__(self, "diagnostics", diagnostics)
+        details = tuple(self.details)
+        detail_names: set[str] = set()
+        for detail in details:
+            if not isinstance(detail, tuple) or len(detail) != 2:
+                raise ValueError("details must contain key/value pairs")
+            name, value = detail
+            if not isinstance(name, str) or not name or name in detail_names:
+                raise ValueError("detail names must be non-empty and unique")
+            if value is not None and not isinstance(value, (str, int, float, bool)):
+                raise ValueError("event details must contain JSON scalar values")
+            if isinstance(value, float) and not isfinite(value):
+                raise ValueError("event detail numbers must be finite")
+            detail_names.add(name)
+        object.__setattr__(self, "details", details)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe event report."""
@@ -124,6 +139,7 @@ class Event:
             "evidence": [item.to_dict() for item in self.evidence],
             "confidence": self.confidence,
             "diagnostics": list(self.diagnostics),
+            "details": dict(self.details),
         }
 
 

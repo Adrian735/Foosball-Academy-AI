@@ -8,10 +8,18 @@ import cv2
 
 from app.detection.config import DEFAULT_DETECTION_CONFIG, DetectionConfig
 from app.detection.contracts.rod_contracts import RodDetectorProtocol
-from app.detection.contracts.table_contracts import TableCalibration
-from app.detection.debug_renderer import render_field_detection, render_rod_candidates, render_stable_rods, write_debug_image
+from app.detection.contracts.table_contracts import FieldGeometry, GoalMouth, TableCalibration
+from app.detection.contracts.video_contracts import SampledFrame
+from app.detection.debug_renderer import (
+    render_field_detection,
+    render_goal_mouths,
+    render_rod_candidates,
+    render_stable_rods,
+    write_debug_image,
+)
 from app.detection.field_consensus import FieldConsensus, FieldConsensusError
 from app.detection.field_detector import FieldDetector
+from app.detection.goal_mouth_detector import GoalMouthDetector
 from app.detection.rod_consensus import RodConsensus, RodConsensusError
 from app.detection.rod_detector import RodDetector
 from app.detection.startup_frames import StartupFrameReader
@@ -57,6 +65,10 @@ class TableCalibrator:
                 warnings.append(str(error))
 
         confidence = field.confidence if field is not None else 0.0
+        goal_mouths, goal_warnings = self._detect_goal_mouths(
+            startup.accepted_frames,
+            field,
+        )
         return TableCalibration(
             metadata=startup.metadata,
             sampled_frame_quality=startup.frame_quality,
@@ -65,6 +77,8 @@ class TableCalibrator:
             confidence=confidence,
             warnings=tuple(warnings),
             detector_config_version=self._config.detector_config_version,
+            goal_mouths=goal_mouths,
+            goal_warnings=goal_warnings,
         )
 
     def calibrate(self, video_path: str) -> TableCalibration:
@@ -104,6 +118,10 @@ class TableCalibrator:
             except RodConsensusError as error:
                 warnings.append(f"Rod consensus requires review: {error}")
 
+        goal_mouths, goal_warnings = self._detect_goal_mouths(
+            startup.accepted_frames,
+            field,
+        )
         return TableCalibration(
             metadata=startup.metadata,
             sampled_frame_quality=startup.frame_quality,
@@ -112,7 +130,24 @@ class TableCalibrator:
             confidence=field.confidence if field is not None else 0.0,
             warnings=tuple(warnings),
             detector_config_version=self._config.detector_config_version,
+            goal_mouths=goal_mouths,
+            goal_warnings=goal_warnings,
         )
+
+    def _detect_goal_mouths(
+        self,
+        frames: tuple[SampledFrame, ...],
+        field: FieldGeometry | None,
+    ) -> tuple[tuple[GoalMouth, ...], tuple[str, ...]]:
+        """Detect goal apertures independently of field and rod confidence."""
+        if field is None:
+            return (), ("goal_geometry_unavailable_no_field",)
+        detector = GoalMouthDetector(self._config)
+        detections = tuple(
+            detector.detect_frame(frame.image, field)
+            for frame in frames
+        )
+        return detector.combine(detections)
 
     def write_field_debug_image(
         self,
@@ -138,6 +173,8 @@ class TableCalibrator:
             frame_index,
             ("No startup frame passed the quality gate", *calibration.warnings),
         )
+        if calibration.field is not None:
+            image = render_goal_mouths(image, calibration.field, calibration.goal_mouths)
         if calibration.field is not None:
             rod_detector = self._rod_detector_factory(self._config)
             candidates_by_frame = []

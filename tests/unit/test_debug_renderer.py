@@ -4,7 +4,12 @@ import cv2
 import numpy as np
 
 from app.detection.contracts.rod_contracts import Rod, RodCandidate
-from app.detection.contracts.table_contracts import FieldGeometry, TableCalibration
+from app.detection.contracts.table_contracts import (
+    FieldGeometry,
+    GoalEnd,
+    GoalMouth,
+    TableCalibration,
+)
 from app.detection.contracts.video_contracts import VideoMetadata
 from app.detection.debug_renderer import (
     render_expected_annotation,
@@ -39,6 +44,7 @@ def test_calibration_overlay_includes_field_rods_and_status(tmp_path) -> None:
         rods=(Rod(0, ((10.0, 50.0), (110.0, 50.0)), 0.5, 0.9, 0.8),),
         confidence=0.9,
         warnings=("manual fixture",),
+        goal_mouths=(GoalMouth(GoalEnd.START, (400.0, -20.0, 600.0, 20.0), 0.0, 0.9),),
     )
 
     output_path = tmp_path / "overlay.png"
@@ -48,6 +54,7 @@ def test_calibration_overlay_includes_field_rods_and_status(tmp_path) -> None:
     assert output_path.exists()
     assert cv2.imread(str(output_path)) is not None
     assert rendered[50, 60].tolist() == [255, 0, 255]
+    assert rendered[10, 60].tolist() == [0, 165, 255]
 
 
 def test_rod_candidate_overlay_distinguishes_accepted_and_rejected_lines() -> None:

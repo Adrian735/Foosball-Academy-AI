@@ -83,6 +83,7 @@ def run_debug_analysis(video_path: Path, output_directory: Path) -> DebugAnalysi
         read_result.metadata,
         calibration.detector_config_version,
         read_result.warnings,
+        calibration.goal_mouths,
     )
     output_path = output_directory / "annotated-debug.mp4"
     _write_annotated_video(

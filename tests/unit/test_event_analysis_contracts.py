@@ -54,6 +54,7 @@ def test_event_and_result_serialize_to_native_json_values() -> None:
                 ],
                 "confidence": 0.82,
                 "diagnostics": ["crossed_right_goal_line"],
+                "details": {},
             }
         ],
         "warnings": ["goal_geometry_requires_review"],
@@ -165,3 +166,27 @@ def test_result_requires_a_configuration_version() -> None:
     """Reports identify the event-analysis configuration that produced them."""
     with pytest.raises(ValueError, match="config_version"):
         EventAnalysisResult("", ())
+
+
+def test_event_serializes_typed_scalar_details() -> None:
+    """Event-specific context such as goal end and direction is JSON-safe."""
+    event = Event(
+        event_type=EventType.GOAL_CROSSED,
+        evidence=(EventEvidence(4, 0.2),),
+        confidence=0.9,
+        details=(("goal_end", "start"), ("direction", "field_to_goal")),
+    )
+
+    assert json.loads(json.dumps(event.to_dict()))["details"] == {
+        "goal_end": "start",
+        "direction": "field_to_goal",
+    }
+
+
+def test_event_rejects_duplicate_or_non_scalar_details() -> None:
+    """Event details cannot serialize ambiguously or leak arbitrary objects."""
+    evidence = (EventEvidence(4, 0.2),)
+    with pytest.raises(ValueError, match="unique"):
+        Event(EventType.GOAL_CROSSED, evidence, 0.9, details=(("end", "start"), ("end", "far")))
+    with pytest.raises(ValueError, match="scalar"):
+        Event(EventType.GOAL_CROSSED, evidence, 0.9, details=(("coordinates", [1, 2]),))  # type: ignore[arg-type]

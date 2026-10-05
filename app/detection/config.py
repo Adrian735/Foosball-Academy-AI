@@ -15,7 +15,7 @@ class DetectionConfig:
     """
 
     # Identifies the exact threshold set used to produce a calibration result.
-    detector_config_version: str = "5"
+    detector_config_version: str = "6"
     # Limits static calibration to the first seconds of a submitted video.
     calibration_window_seconds: float = 3.0
     # Caps decoded startup frames before sampling to bound processing cost.
@@ -102,6 +102,25 @@ class DetectionConfig:
     minimum_shadow_colour_evidence: float = 0.05
     # Enforces the eight-rod geometry of the supported Bonzini layout.
     expected_rod_count: int = 8
+    # Extends the canonical warp on both field ends when inspecting goal apertures.
+    goal_aperture_search_depth_canonical: int = 100
+    # Selects dark pixels belonging to the visible aperture rather than the field.
+    goal_aperture_max_value: int = 70
+    # Restricts expected goal width to plausible centered openings in the field.
+    goal_aperture_min_width_ratio: float = 0.10
+    goal_aperture_max_width_ratio: float = 0.45
+    # Restricts the detected aperture center around the transverse field center.
+    goal_aperture_center_tolerance_ratio: float = 0.22
+    # Requires the aperture component to approach the calibrated field end.
+    goal_aperture_boundary_tolerance_canonical: float = 35.0
+    # Rejects isolated dark pixels and small compression artifacts.
+    goal_aperture_min_area_canonical: int = 500
+    # Requires enough repeated visible samples to publish stable mouth bounds.
+    goal_aperture_minimum_consensus_frames: int = 3
+    # Rejects goal-mouth consensus with unstable canonical bounds.
+    goal_aperture_maximum_consensus_spread: float = 35.0
+    # Routes weak goal-aperture evidence to diagnostics rather than assumed geometry.
+    minimum_goal_aperture_confidence: float = 0.50
 
 
 DEFAULT_DETECTION_CONFIG = DetectionConfig()

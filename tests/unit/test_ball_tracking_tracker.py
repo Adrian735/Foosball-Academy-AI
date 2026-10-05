@@ -9,7 +9,7 @@ from app.ball_tracking.contracts import BallCandidate, ObservationState
 from app.ball_tracking.detector import BallDetectionFrame
 from app.ball_tracking.frame_reader import SequentialFrame
 from app.ball_tracking.tracker import BallTracker
-from app.detection.contracts.table_contracts import FieldGeometry
+from app.detection.contracts.table_contracts import FieldGeometry, GoalMouth
 from app.detection.contracts.video_contracts import VideoMetadata
 
 
@@ -41,7 +41,12 @@ class _ScriptedDetector:
     def __init__(self, candidates: dict[int, tuple[BallCandidate, ...]]) -> None:
         self._candidates = candidates
 
-    def detect(self, frame: np.ndarray, field_geometry: FieldGeometry) -> BallDetectionFrame:
+    def detect(
+        self,
+        frame: np.ndarray,
+        field_geometry: FieldGeometry,
+        goal_mouths: tuple[GoalMouth, ...] = (),
+    ) -> BallDetectionFrame:
         """Return the scripted candidates for the frame encoded in its pixel."""
         frame_index = int(frame[0, 0, 0])
         return BallDetectionFrame(self._candidates.get(frame_index, ()), ())

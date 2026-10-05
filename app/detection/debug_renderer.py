@@ -8,10 +8,13 @@ import cv2
 import numpy as np
 
 from app.detection.contracts.rod_contracts import Rod, RodCandidate
-from app.detection.contracts.table_contracts import FieldGeometry, TableCalibration
+from app.detection.contracts.table_contracts import FieldGeometry, GoalMouth, TableCalibration
+from app.detection.geometry import canonical_to_field
 
 _FIELD_COLOUR = (0, 255, 255)
 _ROD_COLOUR = (255, 0, 255)
+_GOAL_COLOUR = (255, 255, 0)
+_GOAL_LINE_COLOUR = (0, 165, 255)
 _REJECTED_ROD_COLOUR = (0, 0, 255)
 _TEXT_COLOUR = (255, 255, 255)
 _WARNING_COLOUR = (0, 0, 255)
@@ -29,7 +32,20 @@ def render_table_calibration(image: np.ndarray, calibration: TableCalibration) -
     if calibration.field:
         _draw_field(overlay, calibration.field.to_dict()["corners"])
     _draw_rods(overlay, [rod.to_dict() for rod in calibration.rods])
+    if calibration.field is not None:
+        _draw_goal_mouths(overlay, calibration.field, calibration.goal_mouths)
     _draw_status(overlay, calibration.confidence, calibration.warnings)
+    return overlay
+
+
+def render_goal_mouths(
+    image: np.ndarray,
+    field: FieldGeometry,
+    goal_mouths: Sequence[GoalMouth],
+) -> np.ndarray:
+    """Return a copy annotated with calibrated aperture bounds and crossing lines."""
+    overlay = image.copy()
+    _draw_goal_mouths(overlay, field, goal_mouths)
     return overlay
 
 
@@ -121,6 +137,55 @@ def _draw_rods(image: np.ndarray, rods: Sequence[Mapping[str, Any]]) -> None:
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
             _ROD_COLOUR,
+            2,
+            cv2.LINE_AA,
+        )
+
+
+def _draw_goal_mouths(
+    image: np.ndarray,
+    field: FieldGeometry,
+    goal_mouths: Sequence[GoalMouth],
+) -> None:
+    """Draw each canonical aperture box and its crossing plane in source pixels."""
+    for mouth in goal_mouths:
+        left, top, right, bottom = mouth.opening_bounds
+        canonical_points = (
+            (left, top),
+            (right, top),
+            (right, bottom),
+            (left, bottom),
+        )
+        points = np.asarray(
+            [
+                canonical_to_field(point, field.corners)
+                for point in canonical_points
+            ],
+            dtype=np.int32,
+        ).reshape((-1, 1, 2))
+        cv2.polylines(image, [points], True, _GOAL_COLOUR, 2, cv2.LINE_AA)
+        line_start = canonical_to_field((left, mouth.crossing_line_y), field.corners)
+        line_end = canonical_to_field((right, mouth.crossing_line_y), field.corners)
+        cv2.line(
+            image,
+            (int(round(line_start[0])), int(round(line_start[1]))),
+            (int(round(line_end[0])), int(round(line_end[1]))),
+            _GOAL_LINE_COLOUR,
+            3,
+            cv2.LINE_AA,
+        )
+        line_y = int(round((line_start[1] + line_end[1]) / 2.0))
+        label_y = line_y + 18 if line_y < image.shape[0] // 2 else line_y - 8
+        cv2.putText(
+            image,
+            f"goal line {mouth.end.value}",
+            (
+                max(2, int(round(min(line_start[0], line_end[0])))),
+                min(image.shape[0] - 2, max(14, label_y)),
+            ),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            _GOAL_LINE_COLOUR,
             2,
             cv2.LINE_AA,
         )

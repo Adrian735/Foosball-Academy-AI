@@ -16,7 +16,7 @@ from app.ball_tracking.contracts import (
 )
 from app.ball_tracking.detector import BallDetectionFrame, BallDetector
 from app.ball_tracking.frame_reader import SequentialFrame
-from app.detection.contracts.table_contracts import FieldGeometry
+from app.detection.contracts.table_contracts import FieldGeometry, GoalMouth
 from app.detection.contracts.video_contracts import VideoMetadata
 
 
@@ -47,6 +47,7 @@ class BallTracker:
         video_metadata: VideoMetadata | dict[str, object],
         calibration_config_version: str,
         decoder_warnings: tuple[str, ...] = (),
+        goal_mouths: tuple[GoalMouth, ...] = (),
     ) -> BallTrackingResult:
         """Detect and associate every supplied frame in source order.
 
@@ -62,7 +63,7 @@ class BallTracker:
         detected_confidences: list[float] = []
 
         for frame in frames:
-            detection = self._detector.detect(frame.image, field_geometry)
+            detection = self._detector.detect(frame.image, field_geometry, goal_mouths)
             candidates_by_frame.append(detection.accepted + detection.rejected)
             observation, last_state, missing_start, longest_missing_interval = self._associate(
                 frame,

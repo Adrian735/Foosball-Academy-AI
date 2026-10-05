@@ -29,6 +29,7 @@ def main(argv: list[str] | None = None) -> int:
             read_result.metadata,
             calibration.detector_config_version,
             read_result.warnings,
+            calibration.goal_mouths,
         )
         _write_json(arguments.output, tracking_result.to_dict())
         if arguments.debug_output_dir:

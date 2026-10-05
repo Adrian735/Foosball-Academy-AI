@@ -17,6 +17,7 @@ from app.ball_tracking.contracts import (
     BallTrack,
     ObservationState,
 )
+from app.detection.contracts.table_contracts import GoalEnd
 
 
 def _calibration_payload(**overrides: object) -> dict[str, object]:
@@ -82,6 +83,39 @@ def test_calibration_loader_accepts_table_calibration_shape() -> None:
     assert calibration.field is not None
     assert calibration.field.corners[0] == (100.0, 100.0)
     assert calibration.metadata.width == 1920
+
+
+def test_calibration_loader_accepts_visually_detected_goal_geometry() -> None:
+    """Standalone tracking can load optional goal apertures and their diagnostics."""
+    mouth = {
+        "end": "start",
+        "opening_bounds": [390.0, -20.0, 610.0, 8.0],
+        "crossing_line_y": 0.0,
+        "confidence": 0.9,
+        "diagnostics": ["visual_aperture_consensus"],
+    }
+
+    calibration = table_calibration_from_dict(
+        _calibration_payload(goal_mouths=[mouth], goal_warnings=["goal_end_aperture_unavailable"])
+    )
+
+    assert calibration.goal_mouths[0].end is GoalEnd.START
+    assert calibration.goal_mouths[0].opening_bounds == (390.0, -20.0, 610.0, 8.0)
+    assert calibration.goal_warnings == ("goal_end_aperture_unavailable",)
+
+
+def test_calibration_loader_rejects_invalid_goal_geometry() -> None:
+    """Malformed visual mouth data does not become tracking mask geometry."""
+    mouth = {
+        "end": "left",
+        "opening_bounds": [390.0, -20.0, 610.0, 8.0],
+        "crossing_line_y": 0.0,
+        "confidence": 0.9,
+        "diagnostics": [],
+    }
+
+    with pytest.raises(CalibrationLoadError, match="goal mouth.end"):
+        table_calibration_from_dict(_calibration_payload(goal_mouths=[mouth]))
 
 
 def test_calibration_loader_rejects_unknown_keys() -> None:

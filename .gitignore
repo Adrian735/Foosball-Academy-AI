@@ -1,4 +1,5 @@
 docs/*
+!docs/DETECTION_PLAN.md
 !docs/EVENT_ANALYSIS_PLAN.md
 
 # Python

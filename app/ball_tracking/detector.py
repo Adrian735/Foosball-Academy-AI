@@ -8,8 +8,8 @@ import numpy as np
 
 from app.ball_tracking.config import BallTrackingConfig, DEFAULT_BALL_TRACKING_CONFIG
 from app.ball_tracking.contracts import BallCandidate
-from app.detection.contracts.table_contracts import FieldGeometry
-from app.detection.geometry import field_to_canonical
+from app.detection.contracts.table_contracts import FieldGeometry, GoalMouth
+from app.detection.geometry import canonical_to_field, field_to_canonical
 
 
 @dataclass(frozen=True)
@@ -35,12 +35,20 @@ class BallDetector:
         """Create a detector using immutable ball-tracking thresholds."""
         self._config = config
 
-    def detect(self, frame: np.ndarray, field_geometry: FieldGeometry) -> BallDetectionFrame:
-        """Return field-constrained yellow candidates for one BGR frame."""
+    def detect(
+        self,
+        frame: np.ndarray,
+        field_geometry: FieldGeometry,
+        goal_mouths: tuple[GoalMouth, ...] = (),
+    ) -> BallDetectionFrame:
+        """Detect yellow candidates in the field and visually calibrated goal mouths."""
         if frame.ndim != 3 or frame.shape[2] != 3:
             raise ValueError("Ball detection requires a BGR colour image")
 
-        field_mask = self._field_mask(frame.shape[:2], field_geometry)
+        field_mask = cv2.bitwise_or(
+            self._field_mask(frame.shape[:2], field_geometry),
+            self._goal_mask(frame.shape[:2], field_geometry, goal_mouths),
+        )
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         lower, upper = self._config.yellow_hsv_range
         yellow_mask = cv2.inRange(hsv, np.asarray(lower, dtype=np.uint8), np.asarray(upper, dtype=np.uint8))
@@ -55,7 +63,12 @@ class BallDetector:
         rejected: list[BallCandidate] = []
         frame_area = float(frame.shape[0] * frame.shape[1])
         for contour in contours:
-            candidate, reasons = self._candidate(contour, field_geometry, frame_area)
+            candidate, reasons = self._candidate(
+                contour,
+                field_geometry,
+                frame_area,
+                goal_mouths,
+            )
             if reasons:
                 rejected.append(
                     BallCandidate(
@@ -92,6 +105,7 @@ class BallDetector:
         contour: np.ndarray,
         field_geometry: FieldGeometry,
         frame_area: float,
+        goal_mouths: tuple[GoalMouth, ...],
     ) -> tuple[BallCandidate, list[str]]:
         """Build one candidate and named rejection reasons from a contour."""
         area = float(cv2.contourArea(contour))
@@ -125,10 +139,12 @@ class BallDetector:
         canonical_x, canonical_y = canonical_center
         maximum_x = self._config.canonical_field_width - 1
         maximum_y = self._config.canonical_field_height - 1
-        if not 0 <= canonical_x <= maximum_x or not 0 <= canonical_y <= maximum_y:
+        in_goal_mouth = self._inside_goal_mouth(canonical_center, goal_mouths)
+        in_field = 0 <= canonical_x <= maximum_x and 0 <= canonical_y <= maximum_y
+        if not in_field and not in_goal_mouth:
             reasons.append("outside_canonical_field")
         edge_margin = self._config.field_edge_margin_canonical
-        if (
+        if not in_goal_mouth and (
             canonical_x < edge_margin
             or canonical_x > maximum_x - edge_margin
             or canonical_y < edge_margin
@@ -136,6 +152,45 @@ class BallDetector:
         ):
             reasons.append("near_field_edge")
         return candidate, reasons
+
+    def _goal_mask(
+        self,
+        shape: tuple[int, int],
+        field_geometry: FieldGeometry,
+        goal_mouths: tuple[GoalMouth, ...],
+    ) -> np.ndarray:
+        """Mask only the padded canonical bounds of visually detected mouths."""
+        height, width = shape
+        mask = np.zeros((height, width), dtype=np.uint8)
+        padding = self._config.goal_tracking_padding_canonical
+        for mouth in goal_mouths:
+            left, top, right, bottom = mouth.opening_bounds
+            corners = (
+                (left - padding, top - padding),
+                (right + padding, top - padding),
+                (right + padding, bottom + padding),
+                (left - padding, bottom + padding),
+            )
+            polygon = np.asarray(
+                [canonical_to_field(point, field_geometry.corners) for point in corners],
+                dtype=np.int32,
+            )
+            cv2.fillConvexPoly(mask, polygon, 255)
+        return mask
+
+    def _inside_goal_mouth(
+        self,
+        point: tuple[float, float],
+        goal_mouths: tuple[GoalMouth, ...],
+    ) -> bool:
+        """Return whether a measured centre lies within one calibrated mouth."""
+        padding = self._config.goal_tracking_padding_canonical
+        x, y = point
+        return any(
+            mouth.opening_bounds[0] - padding <= x <= mouth.opening_bounds[2] + padding
+            and mouth.opening_bounds[1] - padding <= y <= mouth.opening_bounds[3] + padding
+            for mouth in goal_mouths
+        )
 
     def _field_mask(self, shape: tuple[int, int], field_geometry: FieldGeometry) -> np.ndarray:
         """Build an inset pixel mask from the calibrated field polygon."""

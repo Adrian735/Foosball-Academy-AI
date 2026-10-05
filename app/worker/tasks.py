@@ -61,6 +61,7 @@ def process_submission(submission_id: str) -> None:
                 read_result.metadata,
                 calibration.detector_config_version,
                 read_result.warnings,
+                calibration.goal_mouths,
             )
         except (BallVideoReadError, ValueError) as error:
             submission.metrics["ball_tracking"] = None

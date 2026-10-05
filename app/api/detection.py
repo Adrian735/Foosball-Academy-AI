@@ -74,6 +74,7 @@ async def track_ball(
             read_result.metadata,
             calibration.detector_config_version,
             read_result.warnings,
+            calibration.goal_mouths,
         )
         response = {
             "calibration": calibration.to_dict(),
