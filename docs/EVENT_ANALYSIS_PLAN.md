@@ -18,7 +18,7 @@ event-specific tests exist yet.
 
 ## Scope and Requirements
 
-- [ ] **REQ-EVT-001 — Module boundary:** Event analysis accepts serializable
+- [x] **REQ-EVT-001 — Module boundary:** Event analysis accepts serializable
   tracking/calibration contracts and has no FastAPI, Celery, SQLAlchemy,
   database, or storage dependency.
 - [ ] **REQ-EVT-002 — Event evidence:** Every emitted event records its type,
@@ -42,6 +42,17 @@ event-specific tests exist yet.
 - [ ] **REQ-EVT-007 — Reproducibility:** Event thresholds and geometry assumptions
   are held in an immutable, versioned configuration and covered by synthetic
   unit tests and human-annotated supported-video regressions before tuning.
+- [ ] **REQ-EVT-002 acceptance criteria:**
+  1. `EventEvidence`, `Event`, and `EventAnalysisResult` are immutable
+     dataclasses; `EventType` is a string enum.
+  2. Evidence retains source frame index and timestamp, with an optional
+     canonical ball coordinate when one is available.
+  3. Events include type, evidence, unit-interval confidence, and diagnostics;
+     results include ordered events, config version, and warnings.
+  4. Serialization returns only native JSON-safe values and round-trips
+     through `json.dumps`/`json.loads`.
+  5. Invalid confidence, empty evidence, non-finite timestamps or coordinates,
+     negative timestamps, and out-of-order evidence are rejected explicitly.
 
 ## Technical Context and Boundaries
 
@@ -165,8 +176,12 @@ event-specific tests exist yet.
   directly; export it from `app/event_analysis/__init__.py`.
 - [X] T001a [Plan:1.1] Test input JSON serialization and enforce the
   infrastructure import boundary in `tests/unit/test_event_analysis_boundary.py`.
-- [ ] T001b [Plan:1.1] Add event types and JSON-safe `Event` and
-  `EventAnalysisResult` contracts in `app/event_analysis/contracts.py`.
+- [ ] T001b [Plan:1.1] Add `EventType`, immutable `EventEvidence`, `Event`,
+  and `EventAnalysisResult` contracts in
+  `app/event_analysis/contracts.py`.
+- [ ] T001c [Plan:1.1] Test event evidence, confidence and ordering
+  validation, immutability, and JSON serialization in
+  `tests/unit/test_event_analysis_contracts.py`.
 - [ ] T002 [Plan:1.1] Add immutable, versioned event thresholds and validation
   in `app/event_analysis/config.py`.
 - [ ] T003 [Plan:2.1] Implement deterministic lost/reacquired event extraction
