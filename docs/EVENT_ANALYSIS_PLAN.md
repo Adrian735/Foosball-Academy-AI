@@ -21,12 +21,24 @@ event-specific tests exist yet.
 - [x] **REQ-EVT-001 — Module boundary:** Event analysis accepts serializable
   tracking/calibration contracts and has no FastAPI, Celery, SQLAlchemy,
   database, or storage dependency.
-- [ ] **REQ-EVT-002 — Event evidence:** Every emitted event records its type,
+- [x] **REQ-EVT-002 — Event evidence:** Every emitted event records its type,
   source frame/timestamp evidence, relevant canonical coordinates, confidence,
   and diagnostics, and serializes to plain JSON-safe values.
-- [ ] **REQ-EVT-003 — Ball transitions:** Detect ball-lost and ball-reacquired
+- [x] **REQ-EVT-003 — Ball transitions:** Detect ball-lost and ball-reacquired
   intervals from explicit `BallObservation` states. Preserve missing and
   uncertain evidence; do not interpolate measurements.
+- [ ] **REQ-EVT-003 acceptance criteria:**
+  1. One `ball_lost` event is emitted at the first non-detected observation
+     after a detected ball; repeated missed/uncertain frames do not duplicate
+     the transition.
+  2. A `ball_reacquired` event is emitted on the next detected observation and
+     retains the prior detection, every missed/uncertain observation, and the
+     reacquired observation with original frame indices/timestamps/states.
+  3. No positions are synthesized for missed/uncertain observations.
+  4. Leading unobserved frames do not assert a loss transition; trailing
+     unresolved loss is represented by a result warning and no reacquired event.
+  5. Existing track warnings and conservative confidence are retained; invalid
+     observation ordering is rejected explicitly.
 - [ ] **REQ-EVT-004 — Goal crossings:** Detect a ball crossing a configured goal
   mouth/line from consecutive supported observations, with side, direction,
   timing, confidence, and source frames. Do not treat every field exit as a
@@ -176,17 +188,19 @@ event-specific tests exist yet.
   directly; export it from `app/event_analysis/__init__.py`.
 - [X] T001a [Plan:1.1] Test input JSON serialization and enforce the
   infrastructure import boundary in `tests/unit/test_event_analysis_boundary.py`.
-- [ ] T001b [Plan:1.1] Add `EventType`, immutable `EventEvidence`, `Event`,
+- [x] T001b [Plan:1.1] Add `EventType`, immutable `EventEvidence`, `Event`,
   and `EventAnalysisResult` contracts in
   `app/event_analysis/contracts.py`.
-- [ ] T001c [Plan:1.1] Test event evidence, confidence and ordering
+- [x] T001c [Plan:1.1] Test event evidence, confidence and ordering
   validation, immutability, and JSON serialization in
   `tests/unit/test_event_analysis_contracts.py`.
 - [ ] T002 [Plan:1.1] Add immutable, versioned event thresholds and validation
   in `app/event_analysis/config.py`.
-- [ ] T003 [Plan:2.1] Implement deterministic lost/reacquired event extraction
+- [x] T003a [Plan:2.1] Add transition, gap, unresolved, warning, confidence,
+  and evidence-preservation tests in `tests/unit/test_event_analyzer.py`.
+- [x] T003 [Plan:2.1] Implement deterministic lost/reacquired event extraction
   in `app/event_analysis/analyzer.py`.
-- [ ] T004 [Plan:1.1,2.1] Add serialization, ordering, timestamp, missing-frame,
+- [x] T004 [Plan:1.1,2.1] Add serialization, ordering, timestamp, missing-frame,
   uncertain-frame, and low-confidence tests in
   `tests/unit/test_event_analysis_contracts.py` and
   `tests/unit/test_event_analyzer.py`.

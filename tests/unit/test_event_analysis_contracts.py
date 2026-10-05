@@ -5,6 +5,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from app.ball_tracking.contracts import ObservationState
 from app.event_analysis.contracts import Event, EventAnalysisResult, EventEvidence, EventType
 
 
@@ -42,11 +43,13 @@ def test_event_and_result_serialize_to_native_json_values() -> None:
                         "frame_index": 12,
                         "timestamp_seconds": 0.4,
                         "canonical_position": [980.0, 300.0],
+                        "observation_state": None,
                     },
                     {
                         "frame_index": 13,
                         "timestamp_seconds": 0.433,
                         "canonical_position": [1005.0, 301.0],
+                        "observation_state": None,
                     },
                 ],
                 "confidence": 0.82,
@@ -65,7 +68,19 @@ def test_event_evidence_can_retain_a_boundary_without_a_position() -> None:
         "frame_index": 20,
         "timestamp_seconds": 0.667,
         "canonical_position": None,
+        "observation_state": None,
     }
+
+
+def test_event_evidence_serializes_explicit_ball_observation_state() -> None:
+    """Missed and uncertain evidence can be represented without a position."""
+    evidence = EventEvidence(
+        frame_index=20,
+        timestamp_seconds=0.667,
+        observation_state=ObservationState.UNCERTAIN,
+    )
+
+    assert evidence.to_dict()["observation_state"] == "uncertain"
 
 
 def test_event_contracts_are_immutable() -> None:

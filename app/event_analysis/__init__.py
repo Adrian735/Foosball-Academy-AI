@@ -1,5 +1,6 @@
 """Pure event-analysis contracts and algorithms."""
 
+from app.event_analysis.analyzer import EventAnalyzer
 from app.event_analysis.contracts import (
     Event,
     EventAnalysisInput,
@@ -10,6 +11,7 @@ from app.event_analysis.contracts import (
 
 __all__ = [
     "Event",
+    "EventAnalyzer",
     "EventAnalysisInput",
     "EventAnalysisResult",
     "EventEvidence",

@@ -5,7 +5,7 @@ from enum import Enum
 from math import isfinite
 from typing import Any
 
-from app.ball_tracking.contracts import BallTrack
+from app.ball_tracking.contracts import BallTrack, ObservationState
 from app.detection.contracts.table_contracts import TableCalibration
 
 Point = tuple[float, float]
@@ -41,6 +41,7 @@ class EventEvidence:
     frame_index: int
     timestamp_seconds: float
     canonical_position: Point | None = None
+    observation_state: ObservationState | None = None
 
     def __post_init__(self) -> None:
         """Validate source evidence and normalize coordinates to Python floats."""
@@ -61,6 +62,10 @@ class EventEvidence:
             if not all(isfinite(coordinate) for coordinate in position):
                 raise ValueError("canonical_position must be a finite 2D point")
             object.__setattr__(self, "canonical_position", position)
+        if self.observation_state is not None and not isinstance(
+            self.observation_state, ObservationState
+        ):
+            raise ValueError("observation_state must be an ObservationState")
 
     def to_dict(self) -> dict[str, Any]:
         """Return frame, timestamp, and optional coordinates as native JSON values."""
@@ -69,6 +74,9 @@ class EventEvidence:
             "timestamp_seconds": self.timestamp_seconds,
             "canonical_position": (
                 list(self.canonical_position) if self.canonical_position is not None else None
+            ),
+            "observation_state": (
+                self.observation_state.value if self.observation_state is not None else None
             ),
         }
 
