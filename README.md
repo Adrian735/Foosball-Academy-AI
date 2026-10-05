@@ -5,7 +5,9 @@
 Exercise-validation service: players submit short training videos, the
 backend analyzes them and either approves/rejects automatically or routes
 them to a coach for review. See [docs/PLAN.md](docs/PLAN.md) for the full
-architecture and [docs/FLOW.md](docs/FLOW.md) for the submission flow.
+architecture and [docs/FLOW.md](docs/FLOW.md) for the submission flow. The
+[event-analysis implementation plan](docs/EVENT_ANALYSIS_PLAN.md) details the
+CV event layer's scope, sequence, and regression gates.
 
 ## Repository structure
 
