@@ -148,7 +148,7 @@ def _rod(data: Mapping[str, Any]) -> Rod:
 
 
 def _goal_mouth(data: Mapping[str, Any]) -> GoalMouth:
-    """Validate and reconstruct one visually detected goal aperture."""
+    """Validate and reconstruct one field-derived goal-mouth estimate."""
     _check_keys(
         data,
         {"end", "opening_bounds", "crossing_line_y", "confidence", "diagnostics"},

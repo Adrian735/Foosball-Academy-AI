@@ -85,14 +85,14 @@ def test_calibration_loader_accepts_table_calibration_shape() -> None:
     assert calibration.metadata.width == 1920
 
 
-def test_calibration_loader_accepts_visually_detected_goal_geometry() -> None:
-    """Standalone tracking can load optional goal apertures and their diagnostics."""
+def test_calibration_loader_accepts_field_derived_goal_geometry() -> None:
+    """Standalone tracking can load optional estimated apertures and diagnostics."""
     mouth = {
         "end": "start",
         "opening_bounds": [390.0, -20.0, 610.0, 8.0],
         "crossing_line_y": 0.0,
         "confidence": 0.9,
-        "diagnostics": ["visual_aperture_consensus"],
+        "diagnostics": ["bonzini_b90_geometry_estimate"],
     }
 
     calibration = table_calibration_from_dict(

@@ -48,16 +48,18 @@ successful calibration by rescaling the score.
 
 - Detect the playable field polygon and ordered corners.
 - Produce a field mask and a normalized field coordinate system.
-- Visually locate each Bonzini goal aperture from accepted calibration frames
-  and expose stable canonical mouth bounds for downstream ball tracking.
+- Derive both Bonzini B90 goal mouths from detected field geometry and expose
+  canonical bounds for downstream ball tracking. Use the documented defaults:
+  1200 × 700 mm playfield, 200 mm centered opening, and 150 mm mouth depth
+  beyond each short end.
 - Detect horizontal rods within/around the detected table.
 - Assign rods stable vertical indices from top to bottom.
 - Verify the Bonzini layout: eight distinct rods, with player-colour evidence
   from the red and blue teams.
 - Reject strong dark shadow bands inside the field when they have no player-colour
   evidence; goal-area rods remain eligible because they can be partially visible.
-- Report missing, occluded, or unstable goal-aperture detection separately from
-  field/rod calibration confidence; never substitute assumed goal dimensions.
+- Report goal geometry as an estimate derived from field calibration and the
+  supported B90 dimensions; do not imply it was visually observed.
 - Assign confidence and explainable diagnostics to every result.
 - Persist the calibration result so later worker stages do not repeat it.
 - Regression tests based on short video extracts and manually verified
@@ -102,13 +104,10 @@ flowchart LR
     Q --> RD
     RD --> RC[Rod candidates per frame]
     RC --> RCS[Rod consensus]
-    M --> GD[goal_mouth_detector]
-    Q --> GD
-    GD --> GC[Goal aperture candidates]
-    GC --> GCS[Goal-mouth consensus]
+    M --> GM[Bonzini B90 goal geometry]
     M --> CAL[TableCalibration]
     RCS --> CAL
-    GCS --> CAL
+    GM --> CAL
     CAL --> DB[(Submission metrics / calibration)]
     CAL --> NEXT[Later ball/event stages]
 ```
@@ -123,10 +122,9 @@ Shared immutable dataclasses and no OpenCV algorithms:
   `bottom_right`, `bottom_left`), bounding box, confidence, detection method.
 - `Rod`: stable `index`, field-relative vertical position, pixel line segment,
   confidence.
-- `GoalMouth`: canonical end (`start`/`end`), aperture span and crossing line,
-  confidence, and detector diagnostics. Coordinates are defined relative to
-  the canonical field plane and are based on visual evidence, not table-model
-  constants.
+- `GoalMouth`: canonical end (`start`/`end`), estimated aperture span and
+  crossing line, confidence, and diagnostics. Coordinates are defined relative
+  to the canonical field plane and computed from the supported B90 dimensions.
 - `TableCalibration`: video metadata, sampled-frame diagnostics,
   `FieldGeometry`, rods, goal mouths and separate goal diagnostics, global
   field/rod confidence, warnings.
@@ -363,9 +361,8 @@ should produce a clear failure/warning instead of an incorrect confident result.
    than yielding a high-confidence geometry result.
 6. Debug output can render the final field polygon and numbered rods over a
    sampled input frame for visual inspection.
-7. Goal-mouth geometry is detected visually across accepted startup frames,
-   serialized in `TableCalibration`, and remains unavailable with diagnostics
-   when the aperture cannot be distinguished confidently.
+7. Goal-mouth geometry is scaled from the accepted field consensus using the
+   versioned Bonzini B90 defaults and serialized with estimate diagnostics.
 
 ## Delivery order
 
@@ -446,8 +443,8 @@ Implementation plan:
 
 1. Render field polygons, corner labels, rod lines, indices, confidence, and
    warnings from an expected-fixture mapping or `TableCalibration`. For
-   calibrated goal mouths, distinguish the aperture outline from the crossing
-   line and label the canonical goal end.
+   estimated goal mouths, distinguish the aperture outline from the crossing
+   line and label the canonical goal end and B90-derived geometry.
 2. Provide a command-line annotation tool that displays a selected frame,
    captures ordered corner clicks followed by rod-line clicks, and writes the
    expected-fixture JSON format.

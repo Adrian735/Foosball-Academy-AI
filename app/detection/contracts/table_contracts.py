@@ -40,7 +40,7 @@ class GoalEnd(str, Enum):
 
 @dataclass(frozen=True)
 class GoalMouth:
-    """Visually detected goal aperture and its canonical crossing plane."""
+    """Estimated goal aperture and its canonical crossing plane."""
 
     end: GoalEnd
     opening_bounds: Tuple[float, float, float, float]

@@ -1,6 +1,7 @@
 """Configuration values for static Bonzini table detection."""
 
 from dataclasses import dataclass
+from math import isfinite
 from typing import Tuple
 
 HSVRange = Tuple[Tuple[int, int, int], Tuple[int, int, int]]
@@ -15,7 +16,7 @@ class DetectionConfig:
     """
 
     # Identifies the exact threshold set used to produce a calibration result.
-    detector_config_version: str = "6"
+    detector_config_version: str = "7"
     # Limits static calibration to the first seconds of a submitted video.
     calibration_window_seconds: float = 3.0
     # Caps decoded startup frames before sampling to bound processing cost.
@@ -102,25 +103,27 @@ class DetectionConfig:
     minimum_shadow_colour_evidence: float = 0.05
     # Enforces the eight-rod geometry of the supported Bonzini layout.
     expected_rod_count: int = 8
-    # Extends the canonical warp on both field ends when inspecting goal apertures.
-    goal_aperture_search_depth_canonical: int = 100
-    # Selects dark pixels belonging to the visible aperture rather than the field.
-    goal_aperture_max_value: int = 70
-    # Restricts expected goal width to plausible centered openings in the field.
-    goal_aperture_min_width_ratio: float = 0.10
-    goal_aperture_max_width_ratio: float = 0.45
-    # Restricts the detected aperture center around the transverse field center.
-    goal_aperture_center_tolerance_ratio: float = 0.22
-    # Requires the aperture component to approach the calibrated field end.
-    goal_aperture_boundary_tolerance_canonical: float = 35.0
-    # Rejects isolated dark pixels and small compression artifacts.
-    goal_aperture_min_area_canonical: int = 500
-    # Requires enough repeated visible samples to publish stable mouth bounds.
-    goal_aperture_minimum_consensus_frames: int = 3
-    # Rejects goal-mouth consensus with unstable canonical bounds.
-    goal_aperture_maximum_consensus_spread: float = 35.0
-    # Routes weak goal-aperture evidence to diagnostics rather than assumed geometry.
-    minimum_goal_aperture_confidence: float = 0.50
+    # Defines the physical width of the supported Bonzini B90 playfield.
+    bonzini_playfield_width_mm: float = 700.0
+    # Defines the physical length of the supported Bonzini B90 playfield.
+    bonzini_playfield_length_mm: float = 1200.0
+    # Defines the centered B90 goal opening width.
+    bonzini_goal_opening_width_mm: float = 200.0
+    # Extends the estimated goal mouth beyond each field end for ball tracking.
+    bonzini_goal_mouth_depth_mm: float = 150.0
+
+    def __post_init__(self) -> None:
+        """Validate physical geometry dimensions used to estimate B90 goals."""
+        dimensions = (
+            self.bonzini_playfield_width_mm,
+            self.bonzini_playfield_length_mm,
+            self.bonzini_goal_opening_width_mm,
+            self.bonzini_goal_mouth_depth_mm,
+        )
+        if any(not isfinite(value) or value <= 0 for value in dimensions):
+            raise ValueError("Bonzini dimensions must be positive")
+        if self.bonzini_goal_opening_width_mm >= self.bonzini_playfield_width_mm:
+            raise ValueError("Bonzini goal opening must be narrower than the playfield")
 
 
 DEFAULT_DETECTION_CONFIG = DetectionConfig()

@@ -147,11 +147,11 @@ event-specific tests exist yet.
 
 ### REQ-EVT-004 acceptance criteria
 
-1. Static calibration detects each visually observable goal aperture from the
-   supported Bonzini startup frames and exposes stable canonical bounds plus
-   confidence/diagnostics in `TableCalibration`.
-2. Low-confidence or occluded goal geometry remains unavailable and does not
-   get replaced with a guessed default.
+1. Static calibration derives both goal mouths from detected field geometry
+   and the supported Bonzini B90 defaults: a 1200 × 700 mm playfield, centered
+   200 mm opening, and 150 mm mouth depth beyond each short end.
+2. Goal geometry diagnostics clearly mark the mouth bounds as B90-derived
+   estimates; field-calibration confidence remains attached to the estimate.
 3. Ball detection/tracking accepts measurements inside configured goal mouths
    as well as the playable field; unsupported out-of-field regions remain
    masked.
@@ -161,17 +161,16 @@ event-specific tests exist yet.
 5. Event payload includes canonical end (`start` or `end`), inward/outward
    direction, source evidence, and confidence; duplicate jitter/reversal does
    not report repeated goals.
-6. Synthetic visual-aperture and ball-crossing tests pass, and supported-video
-   event annotation is added before production threshold tuning.
+6. Synthetic field-to-goal geometry and ball-crossing tests pass; expected
+   geometry is calculated from independently specified B90 dimensions.
 
 ### Step 3: Detect goal apertures and crossings
 
 - **Requirements:** REQ-EVT-002, REQ-EVT-004, REQ-EVT-006, REQ-EVT-007
-- Add a separate visually based goal-aperture detector under
-  `app/detection/`, with per-frame evidence and cross-frame consensus.
-- Include goal bounds in `TableCalibration`, preserving geometry confidence
-  and diagnostics. Do not change field/rod confidence or treat missing goal
-  detections as exercise failures.
+- Add a separate B90 goal-geometry estimator under `app/detection/` that
+  scales the standard goal width/depth through detected field coordinates.
+- Include estimated bounds in `TableCalibration`, preserving field confidence
+  and explicit model-derived diagnostics. Do not change field/rod confidence.
 - Extend the ball detector's allowed mask with only the calibrated aperture
   regions and retain canonical positions beyond the field polygon.
 - Require a direct segment between adjacent detected observations to cross a
@@ -231,9 +230,8 @@ event-specific tests exist yet.
 - [x] T005 [Plan:3.1] Add immutable, serializable canonical `GoalMouth`
   geometry and separate diagnostics to
   `app/detection/contracts/table_contracts.py`.
-- [x] T006 [Plan:3.1] Detect the visible goal aperture from accepted startup
-  frames and combine stable per-end bounds in
-  `app/detection/goal_mouth_detector.py`.
+- [x] T006 [Plan:3.1] Estimate both B90 goal mouths directly from the accepted
+  field calibration in `app/detection/goal_geometry.py`.
 - [x] T007 [Plan:3.1] Integrate detected goal geometry into both table
   calibration entry points and debug renderers without changing field/rod
   review gates.
@@ -243,13 +241,12 @@ event-specific tests exist yet.
 - [x] T009 [Plan:3.1] Add goal crossings, explicit end/direction event data,
   adjacency and gap checks, and duplicate suppression in
   `app/event_analysis/analyzer.py`.
-- [ ] T010 [Plan:3.1] Add synthetic visual and trajectory tests plus manually
+- [ ] T010 [Plan:3.1] Add synthetic geometry and trajectory tests plus manually
   reviewed Bonzini goal annotations under `tests/fixtures/expected/`.
 
 REQ-EVT-004 remains gated on T010's manually reviewed real-video goal
-annotations. The detector and crossing pipeline are implemented and synthetic
-tests cover their contracts, but production threshold tuning and real-world
-accuracy claims must wait for that fixture.
+annotations. Field-derived B90 geometry and crossing behavior have synthetic
+coverage, but real-world accuracy claims still require that fixture.
 
 ### Phase 3 — Player-proximity event signals
 

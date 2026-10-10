@@ -213,7 +213,7 @@ class EventAnalyzer:
                             mouth.confidence,
                         ),
                         diagnostics=(
-                            "visual_goal_aperture_crossing",
+                            "estimated_goal_aperture_crossing",
                             f"goal_{end.value}",
                             f"direction_{direction}",
                         ),

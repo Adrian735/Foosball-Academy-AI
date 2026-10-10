@@ -9,7 +9,6 @@ import cv2
 from app.detection.config import DEFAULT_DETECTION_CONFIG, DetectionConfig
 from app.detection.contracts.rod_contracts import RodDetectorProtocol
 from app.detection.contracts.table_contracts import FieldGeometry, GoalMouth, TableCalibration
-from app.detection.contracts.video_contracts import SampledFrame
 from app.detection.debug_renderer import (
     render_field_detection,
     render_goal_mouths,
@@ -19,7 +18,7 @@ from app.detection.debug_renderer import (
 )
 from app.detection.field_consensus import FieldConsensus, FieldConsensusError
 from app.detection.field_detector import FieldDetector
-from app.detection.goal_mouth_detector import GoalMouthDetector
+from app.detection.goal_geometry import BonziniGoalGeometryEstimator
 from app.detection.rod_consensus import RodConsensus, RodConsensusError
 from app.detection.rod_detector import RodDetector
 from app.detection.startup_frames import StartupFrameReader
@@ -65,10 +64,7 @@ class TableCalibrator:
                 warnings.append(str(error))
 
         confidence = field.confidence if field is not None else 0.0
-        goal_mouths, goal_warnings = self._detect_goal_mouths(
-            startup.accepted_frames,
-            field,
-        )
+        goal_mouths, goal_warnings = self._estimate_goal_mouths(field)
         return TableCalibration(
             metadata=startup.metadata,
             sampled_frame_quality=startup.frame_quality,
@@ -118,10 +114,7 @@ class TableCalibrator:
             except RodConsensusError as error:
                 warnings.append(f"Rod consensus requires review: {error}")
 
-        goal_mouths, goal_warnings = self._detect_goal_mouths(
-            startup.accepted_frames,
-            field,
-        )
+        goal_mouths, goal_warnings = self._estimate_goal_mouths(field)
         return TableCalibration(
             metadata=startup.metadata,
             sampled_frame_quality=startup.frame_quality,
@@ -134,20 +127,13 @@ class TableCalibrator:
             goal_warnings=goal_warnings,
         )
 
-    def _detect_goal_mouths(
-        self,
-        frames: tuple[SampledFrame, ...],
-        field: FieldGeometry | None,
+    def _estimate_goal_mouths(
+        self, field: FieldGeometry | None
     ) -> tuple[tuple[GoalMouth, ...], tuple[str, ...]]:
-        """Detect goal apertures independently of field and rod confidence."""
+        """Estimate B90 goal mouths directly from accepted field geometry."""
         if field is None:
             return (), ("goal_geometry_unavailable_no_field",)
-        detector = GoalMouthDetector(self._config)
-        detections = tuple(
-            detector.detect_frame(frame.image, field)
-            for frame in frames
-        )
-        return detector.combine(detections)
+        return BonziniGoalGeometryEstimator(self._config).estimate(field), ()
 
     def write_field_debug_image(
         self,

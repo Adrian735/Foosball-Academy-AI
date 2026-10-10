@@ -41,7 +41,7 @@ class BallDetector:
         field_geometry: FieldGeometry,
         goal_mouths: tuple[GoalMouth, ...] = (),
     ) -> BallDetectionFrame:
-        """Detect yellow candidates in the field and visually calibrated goal mouths."""
+        """Detect yellow candidates in the field and estimated calibrated goal mouths."""
         if frame.ndim != 3 or frame.shape[2] != 3:
             raise ValueError("Ball detection requires a BGR colour image")
 
@@ -159,7 +159,7 @@ class BallDetector:
         field_geometry: FieldGeometry,
         goal_mouths: tuple[GoalMouth, ...],
     ) -> np.ndarray:
-        """Mask only the padded canonical bounds of visually detected mouths."""
+        """Mask only padded canonical bounds of estimated goal mouths."""
         height, width = shape
         mask = np.zeros((height, width), dtype=np.uint8)
         padding = self._config.goal_tracking_padding_canonical

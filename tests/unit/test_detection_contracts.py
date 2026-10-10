@@ -66,8 +66,8 @@ def test_sampled_frame_quality_exposes_a_rejection_reason() -> None:
     assert quality.to_dict()["rejection_reason"] == "blurred"
 
 
-def test_table_calibration_serializes_detected_goal_mouths_and_diagnostics() -> None:
-    """Goal apertures persist independently from field and rod calibration."""
+def test_table_calibration_serializes_estimated_goal_mouths_and_diagnostics() -> None:
+    """Estimated goal bounds persist independently from field and rod calibration."""
     metadata = VideoMetadata("video.mp4", 30.0, 150, 1280, 720, 5.0)
     field = FieldGeometry(
         ((0.0, 0.0), (1000.0, 0.0), (1000.0, 600.0), (0.0, 600.0)),
@@ -75,9 +75,21 @@ def test_table_calibration_serializes_detected_goal_mouths_and_diagnostics() -> 
         0.9,
         "synthetic",
     )
-    mouth = GoalMouth(GoalEnd.START, (390.0, -20.0, 610.0, 5.0), 0.0, 0.88)
+    mouth = GoalMouth(
+        GoalEnd.START,
+        (390.0, -75.0, 610.0, 0.0),
+        0.0,
+        0.88,
+        ("bonzini_b90_geometry_estimate",),
+    )
     calibration = TableCalibration(
-        metadata, (), field, (), 0.9, goal_mouths=(mouth,), goal_warnings=("end_goal_occluded",)
+        metadata,
+        (),
+        field,
+        (),
+        0.9,
+        goal_mouths=(mouth,),
+        goal_warnings=("goal_geometry_unavailable_no_field",),
     )
 
     report = calibration.to_dict()
@@ -86,13 +98,13 @@ def test_table_calibration_serializes_detected_goal_mouths_and_diagnostics() -> 
     assert report["goal_mouths"] == [
         {
             "end": "start",
-            "opening_bounds": [390.0, -20.0, 610.0, 5.0],
+            "opening_bounds": [390.0, -75.0, 610.0, 0.0],
             "crossing_line_y": 0.0,
             "confidence": 0.88,
-            "diagnostics": [],
+            "diagnostics": ["bonzini_b90_geometry_estimate"],
         }
     ]
-    assert report["goal_warnings"] == ["end_goal_occluded"]
+    assert report["goal_warnings"] == ["goal_geometry_unavailable_no_field"]
 
 
 def test_goal_mouth_rejects_invalid_bounds_and_crossing_line() -> None:

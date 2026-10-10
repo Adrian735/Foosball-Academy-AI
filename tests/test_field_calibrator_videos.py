@@ -7,7 +7,7 @@ import pytest
 
 from app.detection.calibrator import TableCalibrator
 from app.detection.contracts.rod_contracts import RodCandidate
-from app.detection.contracts.table_contracts import FieldGeometry
+from app.detection.contracts.table_contracts import FieldGeometry, GoalEnd
 from app.detection.rod_consensus import RodConsensus, RodConsensusError
 from app.detection.rod_detector import RodDetector
 
@@ -25,7 +25,13 @@ def test_affected_videos_produce_stable_field_calibration(video_number: int) -> 
     assert calibration.field is not None
     assert calibration.confidence >= 0.50
     assert calibration.warnings == ()
-    assert calibration.detector_config_version == "6"
+    assert calibration.detector_config_version == "7"
+    assert tuple(mouth.end for mouth in calibration.goal_mouths) == (
+        GoalEnd.START,
+        GoalEnd.END,
+    )
+    assert all(mouth.confidence == calibration.field.confidence for mouth in calibration.goal_mouths)
+    assert all("bonzini_b90_geometry_estimate" in mouth.diagnostics for mouth in calibration.goal_mouths)
 
 
 def test_calibrate_public_entry_point_returns_field_and_rods() -> None:

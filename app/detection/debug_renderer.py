@@ -178,7 +178,7 @@ def _draw_goal_mouths(
         label_y = line_y + 18 if line_y < image.shape[0] // 2 else line_y - 8
         cv2.putText(
             image,
-            f"goal line {mouth.end.value}",
+            f"B90 goal line {mouth.end.value}",
             (
                 max(2, int(round(min(line_start[0], line_end[0])))),
                 min(image.shape[0] - 2, max(14, label_y)),

@@ -6,7 +6,8 @@ import pytest
 
 from app.ball_tracking.config import BallTrackingConfig
 from app.ball_tracking.detector import BallDetector
-from app.detection.contracts.table_contracts import FieldGeometry, GoalEnd, GoalMouth
+from app.detection.contracts.table_contracts import FieldGeometry
+from app.detection.goal_geometry import BonziniGoalGeometryEstimator
 
 
 FIELD = FieldGeometry(
@@ -87,13 +88,13 @@ def test_detector_rejects_field_edge_blob() -> None:
 
 
 def test_detector_tracks_ball_inside_calibrated_goal_aperture() -> None:
-    """Only a visually calibrated goal aperture extends the ball mask outside the field."""
+    """Only a B90 field-derived goal aperture extends the ball mask beyond the field."""
     image = _image()
     cv2.rectangle(image, (250, 35), (350, 75), (5, 5, 5), -1)
     cv2.circle(image, (300, 42), 8, (0, 220, 220), -1)
-    mouth = GoalMouth(GoalEnd.START, (390.0, -30.0, 610.0, 50.0), 0.0, 0.9)
+    mouths = BonziniGoalGeometryEstimator().estimate(FIELD)
 
-    result = BallDetector().detect(image, FIELD, (mouth,))
+    result = BallDetector().detect(image, FIELD, mouths)
 
     assert len(result.accepted) == 1
     assert result.accepted[0].canonical_center is not None
