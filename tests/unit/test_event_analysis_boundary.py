@@ -12,7 +12,12 @@ import pytest
 from app.ball_tracking.contracts import BallTrack
 from app.detection.contracts.table_contracts import FieldGeometry, TableCalibration
 from app.detection.contracts.video_contracts import VideoMetadata
-from app.event_analysis import EventAnalysisInput
+from app.event_analysis import (
+    EventAnalysisInput,
+    PlayerPositionObservation,
+    PlayerPositionState,
+    PlayerPositionTrack,
+)
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -61,6 +66,35 @@ def test_event_analysis_input_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         analysis_input.track = analysis_input.track
+
+
+def test_event_analysis_input_serializes_optional_player_track() -> None:
+    """Externally measured player positions cross the boundary as plain data."""
+    analysis_input = _analysis_input()
+    player_track = PlayerPositionTrack(
+        "target-player",
+        (
+            PlayerPositionObservation(
+                frame_index=3,
+                timestamp_seconds=0.1,
+                state=PlayerPositionState.DETECTED,
+                canonical_position=(500.0, 300.0),
+                confidence=0.9,
+            ),
+        ),
+        confidence=0.85,
+    )
+    analysis_input = EventAnalysisInput(
+        track=analysis_input.track,
+        calibration=analysis_input.calibration,
+        player_track=player_track,
+    )
+
+    payload = analysis_input.to_dict()
+
+    assert json.loads(json.dumps(payload)) == payload
+    assert payload["player_track"]["player_id"] == "target-player"
+    assert payload["player_track"]["observations"][0]["canonical_position"] == [500.0, 300.0]
 
 
 def test_event_analysis_package_has_no_infrastructure_imports() -> None:

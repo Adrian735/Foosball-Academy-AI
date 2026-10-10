@@ -39,15 +39,15 @@ event-specific tests exist yet.
      unresolved loss is represented by a result warning and no reacquired event.
   5. Existing track warnings and conservative confidence are retained; invalid
      observation ordering is rejected explicitly.
-- [ ] **REQ-EVT-004 — Goal crossings:** Detect the visible goal aperture as
-  part of static table calibration, extend ball tracking into calibrated goal
-  mouths, and identify a ball crossing a mouth between consecutive supported
+- [ ] **REQ-EVT-004 — Goal crossings:** Derive B90 goal-mouth geometry from
+  static field calibration, extend ball tracking into estimated goal mouths,
+  and identify a ball crossing a mouth between consecutive supported
   observations. Include side, direction, source frames/timestamps, confidence,
   and diagnostics; do not treat every field exit as a goal.
-- [ ] **REQ-EVT-005 — Player proximity:** When a separately produced player
-  position track is available, derive ball-entered/left-proximity events and
-  elapsed duration for the target player. This is an event signal only, not
-  an exercise pass/fail result.
+- [x] **REQ-EVT-005 — Player proximity:** When a separately produced player
+  center track is available, derive entered/left events using the versioned
+  B90-scaled physical distance threshold and elapsed duration. This is an
+  event signal only, not an exercise pass/fail result.
 - [ ] **REQ-EVT-006 — Safe uncertainty:** Missing prerequisites, unsupported
   geometry, low-quality track evidence, and ambiguous transitions must be
   reported explicitly. They must not become confident negative exercise
@@ -58,8 +58,8 @@ event-specific tests exist yet.
 - [ ] **REQ-EVT-002 acceptance criteria:**
   1. `EventEvidence`, `Event`, and `EventAnalysisResult` are immutable
      dataclasses; `EventType` is a string enum.
-  2. Evidence retains source frame index and timestamp, with an optional
-     canonical ball coordinate when one is available.
+  2. Evidence retains source frame index and timestamp, with optional
+     canonical ball and player coordinates when available.
   3. Events include type, evidence, unit-interval confidence, and diagnostics;
      results include ordered events, config version, and warnings.
   4. Serialization returns only native JSON-safe values and round-trips
@@ -70,7 +70,8 @@ event-specific tests exist yet.
 ## Technical Context and Boundaries
 
 - Language and runtime: Python, following the existing application packages.
-- Inputs: `BallTrack` observations from `app/ball_tracking/contracts.py` and
+- Inputs: `BallTrack` observations from `app/ball_tracking/contracts.py`,
+  optional measured `PlayerPositionTrack` observations, and
   `FieldGeometry`/`TableCalibration` from `app/detection/contracts/`.
 - Output: immutable event/result contracts with `to_dict()` methods; no
   OpenCV/NumPy values or frame images in persisted output.
@@ -92,16 +93,16 @@ event-specific tests exist yet.
 
 ## Decisions and Gating Questions
 
-1. **Goal geometry and direction:** Visually detect each goal aperture from
-   accepted startup frames and serialize its bounds in `TableCalibration`.
-   Label ends in canonical table coordinates, not player/team orientation;
-   event analysis reports each end and direction without assigning an attack
-   side. Weak or occluded aperture evidence stays unavailable with diagnostics.
+1. **Goal geometry and direction:** Derive B90 goal bounds from the accepted
+   field geometry and versioned B90 defaults. Label ends in canonical table
+   coordinates, not player/team orientation; event analysis reports each end
+   and direction without assigning an attack side.
 2. **Player identity and proximity:** Existing `Rod` values describe rod lines,
-   not individual player positions. Before implementing REQ-EVT-005, agree on
-   the upstream player-position contract and what “under the player” means
-   (figure bounds versus a calibrated distance). Keep this work out of the
-   event package's detection responsibilities.
+   not individual player positions. REQ-EVT-005 consumes an externally
+   measured player-center track in canonical coordinates; proximity uses
+   physical Euclidean distance with a versioned 75 mm radius. Match ball and
+   player observations by source frame only and never infer positions across
+   gaps. This work does not detect player locations.
 3. **Real event fixtures:** Obtain supported clips with manually reviewed event
    annotations before changing any CV threshold. Synthetic tracks can validate
    deterministic temporal logic, but cannot certify real-world event accuracy.
@@ -164,6 +165,22 @@ event-specific tests exist yet.
 6. Synthetic field-to-goal geometry and ball-crossing tests pass; expected
    geometry is calculated from independently specified B90 dimensions.
 
+### REQ-EVT-005 acceptance criteria
+
+1. Event analysis accepts an immutable JSON-safe `PlayerPositionTrack` with
+   a stable player identifier, source frame/timestamp, measured canonical
+   center, state, confidence, and diagnostics.
+2. Ball-to-player distance is computed as a physical Euclidean distance in
+   millimetres using the supported B90 field dimensions; the versioned default
+   proximity radius is 75 mm.
+3. Entered/left events require measured ball and player positions from the
+   same adjacent source frames. Missing, uncertain, low-confidence, unmatched,
+   or non-adjacent evidence is never interpolated or bridged.
+4. Events retain both measured centers, the player identifier, confidence,
+   distance/radius details, and elapsed proximity duration on the leave event.
+5. Missing or incomplete player-position prerequisites produce explicit
+   warnings; event analysis never turns them into a negative exercise result.
+
 ### Step 3: Detect goal apertures and crossings
 
 - **Requirements:** REQ-EVT-002, REQ-EVT-004, REQ-EVT-006, REQ-EVT-007
@@ -188,6 +205,12 @@ event-specific tests exist yet.
   versioned.
 - If player tracking is absent or ambiguous, report that this event family is
   unavailable/uncertain; never represent it as “no control event occurred.”
+- Use a distinct immutable contract for externally measured player centers.
+  The event analyzer consumes this contract but does not infer player
+  positions from rods or image pixels.
+- Compare canonical points after scaling each axis to B90 millimetres and use
+  the configured 75 mm radius. Require same-frame evidence and adjacent frame
+  transitions; gaps make an interval unresolved rather than interpolated.
 
 ### Step 5: Integrate only after standalone validation
 
@@ -250,12 +273,14 @@ coverage, but real-world accuracy claims still require that fixture.
 
 ### Phase 3 — Player-proximity event signals
 
-- [ ] T008 [Plan:4.1] Define/consume the upstream player-position contract
+- [x] T008 [Plan:4.1] Define/consume the upstream player-position contract
   without coupling event analysis to CV, API, or worker implementations.
-- [ ] T009 [Plan:4.1] Implement proximity-entered/left events and elapsed
+- [x] T009 [Plan:4.1] Implement proximity-entered/left events and elapsed
   duration using versioned thresholds in `app/event_analysis/`.
-- [ ] T010 [Plan:4.1] Add synthetic and manually annotated proximity fixtures,
-  including player ambiguity and ball-observation gaps.
+- [x] T010a [Plan:4.1] Add synthetic proximity tests for transitions,
+  confidence gating, unresolved intervals, and ball-observation gaps.
+- [ ] T010b [Plan:4.1] Add manually annotated real-video proximity fixtures
+  before tuning the 75 mm threshold.
 
 ### Phase 4 — Worker integration
 
@@ -283,11 +308,12 @@ coverage, but real-world accuracy claims still require that fixture.
 - Run focused event-analysis tests first, then the repository's full `pytest`
   suite after implementation.
 
-**Completion criteria:** REQ-EVT-001 through REQ-EVT-004 have standalone
-contracts, deterministic behavior, diagnostics, and focused regression
-coverage. REQ-EVT-005 remains explicitly gated until player-position tracking
-and its semantics are available. Worker integration is complete only when it
-preserves the pending-review safety behavior.
+**Completion criteria:** REQ-EVT-001 through REQ-EVT-005 have standalone
+contracts, deterministic behavior, diagnostics, and focused synthetic
+coverage. REQ-EVT-005 consumes externally measured player positions; visual
+player tracking and real-video proximity annotation remain separate gates.
+Worker integration is complete only when it preserves the pending-review
+safety behavior.
 
 ## Requirement Mapping
 
@@ -297,6 +323,6 @@ preserves the pending-review safety behavior.
 | REQ-EVT-002 | 1.1, 2.1, 3.1, 4.1      | `app/event_analysis/contracts.py`; `app/event_analysis/analyzer.py`    |
 | REQ-EVT-003 | 2.1                     | `app/event_analysis/analyzer.py`; `tests/unit/test_event_analyzer.py`  |
 | REQ-EVT-004 | 3.1                     | `app/event_analysis/analyzer.py`; goal-crossing regression fixtures      |
-| REQ-EVT-005 | 4.1                     | `app/event_analysis/analyzer.py`; player-proximity regression fixtures   |
+| REQ-EVT-005 | 4.1                     | `app/event_analysis/contracts.py`, `config.py`, `analyzer.py`; `tests/unit/test_player_proximity.py` |
 | REQ-EVT-006 | 1.1, 2.1, 3.1, 4.1, 5.1 | event diagnostics and worker review-safe integration tests                 |
 | REQ-EVT-007 | 1.1, 3.1, 4.1           | `app/event_analysis/config.py`; synthetic and annotated regression tests |

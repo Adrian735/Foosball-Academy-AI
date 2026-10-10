@@ -7,6 +7,9 @@ from app.event_analysis.contracts import (
     EventAnalysisResult,
     EventEvidence,
     EventType,
+    PlayerPositionObservation,
+    PlayerPositionState,
+    PlayerPositionTrack,
 )
 
 __all__ = [
@@ -16,4 +19,7 @@ __all__ = [
     "EventAnalysisResult",
     "EventEvidence",
     "EventType",
+    "PlayerPositionObservation",
+    "PlayerPositionState",
+    "PlayerPositionTrack",
 ]

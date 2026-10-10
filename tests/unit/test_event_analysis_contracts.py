@@ -6,7 +6,15 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from app.ball_tracking.contracts import ObservationState
-from app.event_analysis.contracts import Event, EventAnalysisResult, EventEvidence, EventType
+from app.event_analysis.contracts import (
+    Event,
+    EventAnalysisResult,
+    EventEvidence,
+    EventType,
+    PlayerPositionObservation,
+    PlayerPositionState,
+    PlayerPositionTrack,
+)
 
 
 def _event() -> Event:
@@ -44,12 +52,16 @@ def test_event_and_result_serialize_to_native_json_values() -> None:
                         "timestamp_seconds": 0.4,
                         "canonical_position": [980.0, 300.0],
                         "observation_state": None,
+                        "canonical_player_position": None,
+                        "player_observation_state": None,
                     },
                     {
                         "frame_index": 13,
                         "timestamp_seconds": 0.433,
                         "canonical_position": [1005.0, 301.0],
                         "observation_state": None,
+                        "canonical_player_position": None,
+                        "player_observation_state": None,
                     },
                 ],
                 "confidence": 0.82,
@@ -70,6 +82,8 @@ def test_event_evidence_can_retain_a_boundary_without_a_position() -> None:
         "timestamp_seconds": 0.667,
         "canonical_position": None,
         "observation_state": None,
+        "canonical_player_position": None,
+        "player_observation_state": None,
     }
 
 
@@ -82,6 +96,44 @@ def test_event_evidence_serializes_explicit_ball_observation_state() -> None:
     )
 
     assert evidence.to_dict()["observation_state"] == "uncertain"
+
+
+def test_event_evidence_serializes_measured_player_position() -> None:
+    """Proximity evidence can retain ball and player coordinates together."""
+    evidence = EventEvidence(
+        frame_index=4,
+        timestamp_seconds=0.2,
+        canonical_position=(501.0, 280.0),
+        observation_state=ObservationState.DETECTED,
+        canonical_player_position=(500.0, 300.0),
+        player_observation_state=PlayerPositionState.DETECTED,
+    )
+
+    assert evidence.to_dict()["canonical_player_position"] == [500.0, 300.0]
+    assert evidence.to_dict()["player_observation_state"] == "detected"
+
+
+def test_player_position_track_serializes_as_json_safe_values() -> None:
+    """Player measurements retain identity, confidence, and source evidence."""
+    observation = PlayerPositionObservation(
+        frame_index=2,
+        timestamp_seconds=0.1,
+        state=PlayerPositionState.DETECTED,
+        canonical_position=(500.0, 300.0),
+        confidence=0.9,
+    )
+    track = PlayerPositionTrack("target-player", (observation,), 0.85)
+
+    assert json.loads(json.dumps(track.to_dict())) == track.to_dict()
+
+
+def test_player_position_track_rejects_out_of_order_observations() -> None:
+    """Player inputs must preserve source chronology."""
+    earlier = PlayerPositionObservation(0, 0.0, PlayerPositionState.DETECTED, (0.0, 0.0), 0.9)
+    later = PlayerPositionObservation(1, 0.1, PlayerPositionState.DETECTED, (0.0, 0.0), 0.9)
+
+    with pytest.raises(ValueError, match="source order"):
+        PlayerPositionTrack("target", (later, earlier), 0.9)
 
 
 def test_event_contracts_are_immutable() -> None:

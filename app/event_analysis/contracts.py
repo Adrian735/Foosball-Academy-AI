@@ -24,6 +24,17 @@ def _finite_float(value: float, field_name: str) -> float:
     return converted
 
 
+def _canonical_point(value: Point, field_name: str) -> Point:
+    """Normalize and validate a finite two-dimensional canonical point."""
+    try:
+        if len(value) != 2:
+            raise ValueError
+        point = tuple(_finite_float(coordinate, field_name) for coordinate in value)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError(f"{field_name} must be a finite 2D point") from error
+    return point
+
+
 class EventType(str, Enum):
     """Supported event categories emitted by event analysis."""
 
@@ -34,6 +45,115 @@ class EventType(str, Enum):
     BALL_LEFT_PROXIMITY = "ball_left_proximity"
 
 
+class PlayerPositionState(str, Enum):
+    """Explicit per-frame state for an externally measured player center."""
+
+    DETECTED = "detected"
+    MISSED = "missed"
+    UNCERTAIN = "uncertain"
+
+
+@dataclass(frozen=True)
+class PlayerPositionObservation:
+    """One source-frame measurement or explicit unavailable player position."""
+
+    frame_index: int
+    timestamp_seconds: float
+    state: PlayerPositionState
+    canonical_position: Point | None
+    confidence: float
+    diagnostics: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Validate frame provenance, state, measured center, and confidence."""
+        if isinstance(self.frame_index, bool) or not isinstance(self.frame_index, int) or self.frame_index < 0:
+            raise ValueError("frame_index must be a non-negative integer")
+        timestamp = _finite_float(self.timestamp_seconds, "timestamp_seconds")
+        if timestamp < 0.0:
+            raise ValueError("timestamp_seconds must be non-negative")
+        object.__setattr__(self, "timestamp_seconds", timestamp)
+        if not isinstance(self.state, PlayerPositionState):
+            raise ValueError("state must be a PlayerPositionState")
+        if self.canonical_position is None:
+            if self.state is PlayerPositionState.DETECTED:
+                raise ValueError("canonical_position is required for a detected player")
+        else:
+            if self.state is not PlayerPositionState.DETECTED:
+                raise ValueError("canonical_position is only valid for a detected player")
+            object.__setattr__(
+                self,
+                "canonical_position",
+                _canonical_point(self.canonical_position, "canonical_position"),
+            )
+        confidence = _finite_float(self.confidence, "confidence")
+        if not 0.0 <= confidence <= 1.0:
+            raise ValueError("confidence must be finite and within [0, 1]")
+        object.__setattr__(self, "confidence", confidence)
+        if isinstance(self.diagnostics, str):
+            raise ValueError("diagnostics must be a sequence of strings")
+        diagnostics = tuple(self.diagnostics)
+        if any(not isinstance(item, str) for item in diagnostics):
+            raise ValueError("diagnostics must contain strings")
+        object.__setattr__(self, "diagnostics", diagnostics)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return this measured player position as plain JSON-safe values."""
+        return {
+            "frame_index": self.frame_index,
+            "timestamp_seconds": self.timestamp_seconds,
+            "state": self.state.value,
+            "canonical_position": (
+                list(self.canonical_position) if self.canonical_position is not None else None
+            ),
+            "confidence": self.confidence,
+            "diagnostics": list(self.diagnostics),
+        }
+
+
+@dataclass(frozen=True)
+class PlayerPositionTrack:
+    """Ordered measured positions for one stable target-player identity."""
+
+    player_id: str
+    observations: tuple[PlayerPositionObservation, ...]
+    confidence: float
+    warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Validate player identity, ordered observations, confidence, and warnings."""
+        if not isinstance(self.player_id, str) or not self.player_id.strip():
+            raise ValueError("player_id must be a non-empty string")
+        observations = tuple(self.observations)
+        if any(not isinstance(item, PlayerPositionObservation) for item in observations):
+            raise ValueError("observations must contain PlayerPositionObservation values")
+        for previous, current in zip(observations, observations[1:]):
+            if (
+                current.frame_index <= previous.frame_index
+                or current.timestamp_seconds < previous.timestamp_seconds
+            ):
+                raise ValueError("player observations must be in source order")
+        object.__setattr__(self, "observations", observations)
+        confidence = _finite_float(self.confidence, "confidence")
+        if not 0.0 <= confidence <= 1.0:
+            raise ValueError("confidence must be finite and within [0, 1]")
+        object.__setattr__(self, "confidence", confidence)
+        if isinstance(self.warnings, str):
+            raise ValueError("warnings must be a sequence of strings")
+        warnings = tuple(self.warnings)
+        if any(not isinstance(item, str) for item in warnings):
+            raise ValueError("warnings must contain strings")
+        object.__setattr__(self, "warnings", warnings)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the selected player's ordered position track."""
+        return {
+            "player_id": self.player_id,
+            "observations": [item.to_dict() for item in self.observations],
+            "confidence": self.confidence,
+            "warnings": list(self.warnings),
+        }
+
+
 @dataclass(frozen=True)
 class EventEvidence:
     """One source-frame observation supporting an event."""
@@ -42,6 +162,8 @@ class EventEvidence:
     timestamp_seconds: float
     canonical_position: Point | None = None
     observation_state: ObservationState | None = None
+    canonical_player_position: Point | None = None
+    player_observation_state: PlayerPositionState | None = None
 
     def __post_init__(self) -> None:
         """Validate source evidence and normalize coordinates to Python floats."""
@@ -53,19 +175,29 @@ class EventEvidence:
         object.__setattr__(self, "timestamp_seconds", timestamp)
 
         if self.canonical_position is not None:
-            try:
-                if len(self.canonical_position) != 2:
-                    raise ValueError
-                position = tuple(float(coordinate) for coordinate in self.canonical_position)
-            except (TypeError, ValueError, OverflowError) as error:
-                raise ValueError("canonical_position must be a finite 2D point") from error
-            if not all(isfinite(coordinate) for coordinate in position):
-                raise ValueError("canonical_position must be a finite 2D point")
-            object.__setattr__(self, "canonical_position", position)
+            object.__setattr__(
+                self,
+                "canonical_position",
+                _canonical_point(self.canonical_position, "canonical_position"),
+            )
         if self.observation_state is not None and not isinstance(
             self.observation_state, ObservationState
         ):
             raise ValueError("observation_state must be an ObservationState")
+        if self.canonical_player_position is not None:
+            object.__setattr__(
+                self,
+                "canonical_player_position",
+                _canonical_point(
+                    self.canonical_player_position,
+                    "canonical_player_position",
+                ),
+            )
+        if self.player_observation_state is not None and not isinstance(
+            self.player_observation_state,
+            PlayerPositionState,
+        ):
+            raise ValueError("player_observation_state must be a PlayerPositionState")
 
     def to_dict(self) -> dict[str, Any]:
         """Return frame, timestamp, and optional coordinates as native JSON values."""
@@ -77,6 +209,16 @@ class EventEvidence:
             ),
             "observation_state": (
                 self.observation_state.value if self.observation_state is not None else None
+            ),
+            "canonical_player_position": (
+                list(self.canonical_player_position)
+                if self.canonical_player_position is not None
+                else None
+            ),
+            "player_observation_state": (
+                self.player_observation_state.value
+                if self.player_observation_state is not None
+                else None
             ),
         }
 
@@ -182,18 +324,23 @@ class EventAnalysisResult:
 
 @dataclass(frozen=True)
 class EventAnalysisInput:
-    """Pair an analyzed ball track with the static calibration that contextualizes it.
+    """Bundle ball, calibration, and optional measured player-track inputs.
 
-    Both values remain the existing CV contracts; event analysis does not
-    duplicate their state into service or persistence models.
+    Ball and calibration values remain their existing upstream contracts.
+    Player positions are optional measured input; this model does not detect
+    or infer them.
     """
 
     track: BallTrack
     calibration: TableCalibration
+    player_track: PlayerPositionTrack | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Return the JSON-safe tracking and calibration reports."""
+        """Return JSON-safe ball, calibration, and optional player inputs."""
         return {
             "track": self.track.to_dict(),
             "calibration": self.calibration.to_dict(),
+            "player_track": (
+                self.player_track.to_dict() if self.player_track is not None else None
+            ),
         }

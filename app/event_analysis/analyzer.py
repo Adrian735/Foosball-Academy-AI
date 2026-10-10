@@ -11,6 +11,9 @@ from app.event_analysis.contracts import (
     EventAnalysisResult,
     EventEvidence,
     EventType,
+    PlayerPositionObservation,
+    PlayerPositionState,
+    PlayerPositionTrack,
 )
 from app.event_analysis.config import DEFAULT_EVENT_ANALYSIS_CONFIG, EventAnalysisConfig
 
@@ -34,6 +37,7 @@ class EventAnalyzer:
         track: BallTrack,
         goal_mouths: tuple[GoalMouth, ...] | None = None,
         goal_warnings: tuple[str, ...] = (),
+        player_track: PlayerPositionTrack | None = None,
     ) -> EventAnalysisResult:
         """Emit ball-state and directly supported goal-crossing events.
 
@@ -41,17 +45,24 @@ class EventAnalyzer:
         detection. Reacquisition is emitted only at a later detection; the full
         unresolved interval remains represented as source evidence. Goal
         crossings require consecutive detected observations and calibrated
-        visual aperture geometry.
+        aperture geometry. Proximity events require adjacent, synchronized,
+        high-confidence ball and player-center measurements.
         """
         self._validate_observation_order(track.observations)
         events: list[Event] = []
         warnings = list(track.warnings)
         warnings.extend(goal_warnings)
         observations = track.observations
+        if player_track is not None:
+            warnings.extend(player_track.warnings)
+            if not player_track.observations:
+                warnings.append("player_position_track_empty")
 
         if not observations:
             warnings.append("no_ball_observations")
             warnings.extend(self._goal_geometry_warnings(goal_mouths))
+            if player_track is None:
+                warnings.append("player_position_track_unavailable")
             return EventAnalysisResult(
                 self._config_version,
                 tuple(events),
@@ -118,6 +129,12 @@ class EventAnalyzer:
             warnings.append("goal_geometry_unavailable")
         else:
             events.extend(self._goal_crossing_events(track, goal_mouths, warnings))
+        if player_track is None:
+            warnings.append("player_position_track_unavailable")
+        else:
+            events.extend(
+                self._player_proximity_events(track, player_track, warnings)
+            )
 
         events.sort(
             key=lambda event: (
@@ -151,6 +168,175 @@ class EventAnalyzer:
             timestamp_seconds=observation.timestamp_seconds,
             canonical_position=position,
             observation_state=observation.state,
+        )
+
+    def _player_proximity_events(
+        self,
+        track: BallTrack,
+        player_track: PlayerPositionTrack,
+        warnings: list[str],
+    ) -> tuple[Event, ...]:
+        """Emit center-distance transitions only for adjacent aligned measurements."""
+        ball_by_frame = {item.frame_index: item for item in track.observations}
+        player_by_frame = {item.frame_index: item for item in player_track.observations}
+        paired_frames = sorted(ball_by_frame.keys() & player_by_frame.keys())
+        if not paired_frames:
+            warnings.append("player_position_ball_track_unaligned")
+            return ()
+
+        events: list[Event] = []
+        previous_ball: BallObservation | None = None
+        previous_player: PlayerPositionObservation | None = None
+        previous_inside: bool | None = None
+        entry_timestamp: float | None = None
+
+        for frame_index in paired_frames:
+            ball = ball_by_frame[frame_index]
+            player = player_by_frame[frame_index]
+            valid = (
+                ball.state is ObservationState.DETECTED
+                and ball.candidate is not None
+                and ball.candidate.canonical_center is not None
+                and player.state is PlayerPositionState.DETECTED
+                and player.canonical_position is not None
+                and track.confidence >= self._config.minimum_player_position_confidence
+                and player_track.confidence >= self._config.minimum_player_position_confidence
+                and ball.confidence >= self._config.minimum_player_position_confidence
+                and player.confidence >= self._config.minimum_player_position_confidence
+                and abs(ball.timestamp_seconds - player.timestamp_seconds)
+                <= self._config.maximum_aligned_timestamp_difference_seconds
+            )
+            if not valid:
+                warnings.append("player_proximity_evidence_unavailable")
+                if entry_timestamp is not None:
+                    warnings.append("player_proximity_interval_incomplete")
+                previous_ball = None
+                previous_player = None
+                previous_inside = None
+                entry_timestamp = None
+                continue
+
+            if (
+                previous_ball is not None
+                and frame_index != previous_ball.frame_index + 1
+            ):
+                if entry_timestamp is not None:
+                    warnings.append("player_proximity_interval_incomplete")
+                previous_ball = None
+                previous_player = None
+                previous_inside = None
+                entry_timestamp = None
+
+            ball_position = self._canonical_position(ball)
+            player_position = player.canonical_position
+            if ball_position is None or player_position is None:
+                warnings.append("player_proximity_evidence_unavailable")
+                previous_ball = None
+                previous_player = None
+                previous_inside = None
+                entry_timestamp = None
+                continue
+
+            distance = self._physical_distance_mm(ball_position, player_position)
+            inside = distance <= self._config.player_proximity_radius_mm
+            if previous_ball is None or previous_player is None or previous_inside is None:
+                if inside:
+                    warnings.append("player_proximity_state_unknown_at_start")
+                previous_ball = ball
+                previous_player = player
+                previous_inside = inside
+                continue
+
+            confidence = min(
+                track.confidence,
+                player_track.confidence,
+                ball.confidence,
+                player.confidence,
+                previous_ball.confidence,
+                previous_player.confidence,
+            )
+            evidence = (
+                self._paired_evidence(previous_ball, previous_player),
+                self._paired_evidence(ball, player),
+            )
+            if not previous_inside and inside:
+                entry_timestamp = ball.timestamp_seconds
+                events.append(
+                    Event(
+                        event_type=EventType.BALL_ENTERED_PROXIMITY,
+                        evidence=evidence,
+                        confidence=confidence,
+                        diagnostics=("measured_player_center_proximity",),
+                        details=(
+                            ("player_id", player_track.player_id),
+                            ("distance_mm", distance),
+                            ("proximity_radius_mm", self._config.player_proximity_radius_mm),
+                        ),
+                    )
+                )
+            elif previous_inside and not inside:
+                if entry_timestamp is not None:
+                    events.append(
+                        Event(
+                            event_type=EventType.BALL_LEFT_PROXIMITY,
+                            evidence=evidence,
+                            confidence=confidence,
+                            diagnostics=("measured_player_center_proximity",),
+                            details=(
+                                ("player_id", player_track.player_id),
+                                (
+                                    "duration_seconds",
+                                    ball.timestamp_seconds - entry_timestamp,
+                                ),
+                                ("distance_mm", distance),
+                                (
+                                    "proximity_radius_mm",
+                                    self._config.player_proximity_radius_mm,
+                                ),
+                            ),
+                        )
+                    )
+                entry_timestamp = None
+
+            previous_ball = ball
+            previous_player = player
+            previous_inside = inside
+
+        if entry_timestamp is not None:
+            warnings.append("player_proximity_interval_unresolved")
+        return tuple(events)
+
+    def _physical_distance_mm(
+        self,
+        ball_position: tuple[float, float],
+        player_position: tuple[float, float],
+    ) -> float:
+        """Scale canonical axes independently before measuring B90 distance."""
+        delta_x_mm = (
+            (ball_position[0] - player_position[0])
+            * self._config.bonzini_playfield_width_mm
+            / self._config.canonical_field_width
+        )
+        delta_y_mm = (
+            (ball_position[1] - player_position[1])
+            * self._config.bonzini_playfield_length_mm
+            / self._config.canonical_field_height
+        )
+        return (delta_x_mm**2 + delta_y_mm**2) ** 0.5
+
+    @staticmethod
+    def _paired_evidence(
+        ball: BallObservation,
+        player: PlayerPositionObservation,
+    ) -> EventEvidence:
+        """Retain ball and measured player centers from a shared source frame."""
+        return EventEvidence(
+            frame_index=ball.frame_index,
+            timestamp_seconds=ball.timestamp_seconds,
+            canonical_position=ball.candidate.canonical_center if ball.candidate else None,
+            observation_state=ball.state,
+            canonical_player_position=player.canonical_position,
+            player_observation_state=player.state,
         )
 
     def _goal_crossing_events(

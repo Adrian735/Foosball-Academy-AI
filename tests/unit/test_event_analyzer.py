@@ -116,7 +116,10 @@ def test_detects_one_loss_and_reacquisition_while_preserving_gap_evidence() -> N
     assert reacquired.evidence[2].to_dict()["timestamp_seconds"] == 0.2
     assert lost.confidence == 0.0
     assert reacquired.confidence == 0.8
-    assert result.warnings == ("goal_geometry_unavailable",)
+    assert result.warnings == (
+        "goal_geometry_unavailable",
+        "player_position_track_unavailable",
+    )
 
 
 def test_consecutive_non_detected_frames_emit_one_loss_event() -> None:
@@ -191,7 +194,11 @@ def test_track_warnings_are_carried_to_event_result() -> None:
         )
     )
 
-    assert result.warnings == ("track_coverage_below_threshold", "goal_geometry_unavailable")
+    assert result.warnings == (
+        "track_coverage_below_threshold",
+        "goal_geometry_unavailable",
+        "player_position_track_unavailable",
+    )
 
 
 def test_analyzer_rejects_observations_out_of_source_order() -> None:
